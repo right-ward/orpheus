@@ -20,7 +20,6 @@ A desktop is optional. An Android device with Shizuku and, on supported versions
 8. No exploit dependency. The project must not depend on bootloader or kernel vulnerabilities.
 9. User-controlled secrets. Portable archives may contain highly sensitive data; encryption is strongly recommended and optional only with an explicit warning.
 10. Recoverability over illusion. Orpheus must never claim to produce a perfect device clone when Android does not permit one.
-11. Archive confidentiality is user-controlled. Encryption is strongly recommended for sensitive archives but may be skipped with an explicit warning.
 
 ## Locked technology decisions
 
@@ -328,6 +327,10 @@ The following are outside the initial scope:
 - creating a byte-for-byte clone of every Android installation
 - silently extracting another application's private data
 - making unsupported restoration claims
+
+## Specification contracts
+
+The remaining theory-level contracts are locked in `docs/specification-contracts.md`, covering the artifact model, provider-based capability model, backup lifecycle, restore-plan semantics, limitation vocabulary, cryptography architecture, and destructive-operation readiness.
 
 ## Open architectural questions
 
