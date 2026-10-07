@@ -4,7 +4,7 @@
 
 This document defines the initial logical specification for Orpheus archives.
 
-It is a design contract, not a frozen binary-format specification. The physical container and serialization details may change during implementation, but the logical concepts below should remain stable.
+It is a design contract, not a frozen binary-format specification. The logical concepts below are stable for the initial design; the physical container and serialization details may change during implementation.
 
 ## Goals
 
@@ -54,7 +54,7 @@ The initial logical layout is:
 └── checksums/
 ~~~
 
-These are logical namespaces. The implementation may package them in a single compressed and/or encrypted container rather than creating a literal directory tree.
+These are logical namespaces. The implementation may package them in a single compressed and/or encrypted container rather than creating a literal directory tree. The MVP container is expected to use ZIP with DEFLATE; this is an implementation detail rather than a permanent part of the logical format.
 
 ## Manifest
 
@@ -296,9 +296,9 @@ Integrity and confidentiality are separate concerns:
 
 ## Encryption
 
-Portable archives should support authenticated encryption.
+Portable archives should support authenticated encryption, but encryption is optional at the user's explicit choice.
 
-The key should be controlled by the user rather than embedded in the archive.
+For archives containing sensitive data, the UI should actively request encryption and provide a strong warning when the user chooses to skip it. The key should be controlled by the user rather than embedded in the archive.
 
 Requirements:
 
@@ -307,18 +307,15 @@ Requirements:
 - explicit KDF parameters in the encrypted envelope
 - versioned encryption metadata
 - no plaintext private-data index when the archive is intended to be fully confidential
+- user-controlled password/key input; external key sources may be added in a later phase
 
 The exact cryptographic primitives and parameters are an implementation decision and must be reviewed before release.
 
 ## Compression and deduplication
 
-The logical format should permit:
+The logical format should permit compressed, deduplicated, and chunked content.
 
-- compressed content
-- deduplicated content
-- chunked large-file storage
-
-The first implementation does not need to optimize all three.
+The first implementation should use ZIP/DEFLATE for the physical container and defer deduplication and chunking until the basic backup/restore pipeline is working reliably.
 
 Correctness, recoverability, and verifiability take priority over maximum compression.
 
@@ -379,6 +376,12 @@ Do not put sensitive user data into:
 - unencrypted diagnostic metadata
 
 The application should make it clear when an archive is portable and therefore potentially accessible outside Android's protected app storage.
+
+## Preservation and migration
+
+The archive is designed for both preservation and migration. Preservation is the underlying model: the archive records artifacts, provenance, integrity, completeness, and restoration requirements. Migration is a consumer of that model that generates and executes a target-device restoration plan.
+
+This separation allows the same archive to remain useful even when the target device differs materially from the source device.
 
 ## Example archive summary
 
