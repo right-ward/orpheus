@@ -13,7 +13,7 @@ Goal: establish contracts before implementation.
 - [ ] Define restoration-plan semantics
 - [ ] Define minimum supported Android API level
 - [ ] Record known Android/OEM limitations
-- [ ] Decide implementation language
+- [x] Decide implementation language: Kotlin
 
 Exit condition: architecture and archive contracts are stable enough that implementation can begin without inventing them ad hoc.
 
