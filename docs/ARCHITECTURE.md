@@ -21,7 +21,9 @@ A desktop is optional. An Android device with Shizuku and, on supported versions
 9. User-controlled secrets. Portable archives may contain highly sensitive data and must be encrypted.
 10. Recoverability over illusion. Orpheus must never claim to produce a perfect device clone when Android does not permit one.
 
-## Locked technology decision
+## Locked technology decisions
+
+### Implementation language
 
 Orpheus is implemented in **Kotlin**.
 
@@ -30,6 +32,16 @@ Kotlin is the sole implementation language for the Android application and its i
 The project deliberately does not introduce a Rust core or a Kotlin/Java-to-Rust FFI layer at this stage. Cross-language integration would add build, testing, packaging, and maintenance complexity without providing a capability that the Android application needs for the MVP.
 
 This decision can be revisited only if implementation evidence shows a concrete requirement that Kotlin cannot satisfy reasonably. Such a requirement must be documented rather than assumed from the idea that Java is "closer to the system."
+
+### Minimum Android API
+
+The initial minimum supported Android API level is **API 26 (Android 8.0 / Oreo)**.
+
+The baseline application should remain functional on API 26+ using public Android APIs. Newer capabilities are capability-gated rather than forcing the entire application to require a newer Android release.
+
+In particular, Shizuku/wireless-debugging workflows may require a newer Android version even though the Orpheus application itself supports API 26.
+
+This is a compatibility target, not a promise that every Orpheus feature works on every API 26 device.
 
 ## High-level architecture
 
@@ -306,7 +318,6 @@ The following are outside the initial scope:
 
 These remain intentionally unresolved until implementation design is discussed:
 
-- minimum supported Android API level
 - exact archive container/compression choice
 - exact authenticated-encryption scheme and key-derivation parameters
 - concurrency and job-execution model
