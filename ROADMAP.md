@@ -11,7 +11,7 @@ Goal: establish contracts before implementation.
 - [ ] Define archive layout and manifest schema
 - [ ] Define encryption and integrity requirements
 - [ ] Define restoration-plan semantics
-- [ ] Define minimum supported Android API level
+- [x] Define minimum supported Android API level: API 26 (Android 8.0)
 - [ ] Record known Android/OEM limitations
 - [x] Decide implementation language: Kotlin
 
