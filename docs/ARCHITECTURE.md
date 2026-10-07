@@ -21,6 +21,16 @@ A desktop is optional. An Android device with Shizuku and, on supported versions
 9. User-controlled secrets. Portable archives may contain highly sensitive data and must be encrypted.
 10. Recoverability over illusion. Orpheus must never claim to produce a perfect device clone when Android does not permit one.
 
+## Locked technology decision
+
+Orpheus is implemented in **Kotlin**.
+
+Kotlin is the sole implementation language for the Android application and its initial supporting libraries. Java remains fully interoperable at the Android API/library boundary, so choosing Kotlin does not reduce access to Android's lower-level platform capabilities.
+
+The project deliberately does not introduce a Rust core or a Kotlin/Java-to-Rust FFI layer at this stage. Cross-language integration would add build, testing, packaging, and maintenance complexity without providing a capability that the Android application needs for the MVP.
+
+This decision can be revisited only if implementation evidence shows a concrete requirement that Kotlin cannot satisfy reasonably. Such a requirement must be documented rather than assumed from the idea that Java is "closer to the system."
+
 ## High-level architecture
 
 ~~~text
@@ -296,11 +306,10 @@ The following are outside the initial scope:
 
 These remain intentionally unresolved until implementation design is discussed:
 
-- implementation language
 - minimum supported Android API level
 - exact archive container/compression choice
 - exact authenticated-encryption scheme and key-derivation parameters
 - concurrency and job-execution model
 - persistence mechanism for resumable jobs
 - exact Shizuku integration strategy
-- whether the first CLI should share code through a native core or arrive later as a separate frontend
+- whether the first CLI should share code through platform-independent Kotlin modules or arrive later as a separate frontend
