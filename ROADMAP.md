@@ -6,16 +6,16 @@ This roadmap prioritizes a reliable Android-first preservation workflow before a
 
 Goal: establish contracts before implementation.
 
-- [ ] Define artifact model and capability statuses
-- [ ] Define backup lifecycle
-- [ ] Define archive layout and manifest schema
-- [ ] Define encryption and integrity requirements
-- [ ] Define restoration-plan semantics
+- [x] Define artifact model and capability statuses
+- [x] Define backup lifecycle
+- [x] Define archive layout and manifest schema
+- [x] Define encryption and integrity requirements
+- [x] Define restoration-plan semantics
 - [x] Define minimum supported Android API level: API 26 (Android 8.0)
-- [ ] Record known Android/OEM limitations
+- [x] Record known Android/OEM limitations
 - [x] Decide implementation language: Kotlin
 
-Exit condition: architecture and archive contracts are stable enough that implementation can begin without inventing them ad hoc.
+Exit condition: architecture, archive, capability, lifecycle, restoration, security, and readiness contracts are stable enough that implementation can begin without inventing them ad hoc.
 
 ## Phase 1 — Android skeleton
 
@@ -251,7 +251,7 @@ Before calling the project safe for real-world backup use:
 - [ ] Interrupted operations have a defined recovery path
 - [ ] Restoration failures do not silently continue
 - [ ] Destructive-adjacent actions require explicit confirmation
-- [ ] Sensitive archives are authenticated and encrypted
+- [ ] Sensitive archives are encrypted by default and explicitly warned about when encryption is skipped; encrypted archives are authenticated
 - [ ] Tests cover at least one normal Android configuration and one Shizuku-enabled configuration
 - [ ] Documentation clearly distinguishes tested behavior from theoretical capability
 
