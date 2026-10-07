@@ -18,7 +18,7 @@ A desktop is optional. An Android device with Shizuku and, on supported versions
 6. One logical archive format, multiple frontends. Android UI, Termux/CLI, and future desktop tooling should consume the same archive and manifests.
 7. Privilege is an adapter. Normal Android APIs, Shizuku/ADB, and eventual root support are capability providers, not separate backup formats.
 8. No exploit dependency. The project must not depend on bootloader or kernel vulnerabilities.
-9. User-controlled secrets. Portable archives may contain highly sensitive data and must be encrypted.
+9. User-controlled secrets. Portable archives may contain highly sensitive data; encryption is strongly recommended and optional only with an explicit warning.
 10. Recoverability over illusion. Orpheus must never claim to produce a perfect device clone when Android does not permit one.
 11. Archive confidentiality is user-controlled. Encryption is strongly recommended for sensitive archives but may be skipped with an explicit warning.
 
