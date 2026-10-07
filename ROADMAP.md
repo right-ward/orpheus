@@ -21,14 +21,14 @@ Exit condition: architecture, archive, capability, lifecycle, restoration, secur
 
 Goal: a runnable Android application with no destructive behavior.
 
-- [ ] Android project structure
-- [ ] Application identity and package metadata
-- [ ] Device/Android information collector
-- [ ] Storage-space inspection
-- [ ] Capability model
-- [ ] Capability scan UI
-- [ ] Structured local logging
-- [ ] Test harness for capability results
+- [x] Android project structure
+- [x] Application identity and package metadata
+- [x] Device/Android information collector
+- [x] Storage-space inspection
+- [x] Capability model
+- [x] Capability scan UI
+- [x] Structured local logging
+- [x] Test harness for capability results
 
 Exit condition:
 
