@@ -20,6 +20,7 @@ A desktop is optional. An Android device with Shizuku and, on supported versions
 8. No exploit dependency. The project must not depend on bootloader or kernel vulnerabilities.
 9. User-controlled secrets. Portable archives may contain highly sensitive data and must be encrypted.
 10. Recoverability over illusion. Orpheus must never claim to produce a perfect device clone when Android does not permit one.
+11. Archive confidentiality is user-controlled. Encryption is strongly recommended for sensitive archives but may be skipped with an explicit warning.
 
 ## Locked technology decisions
 
@@ -32,6 +33,20 @@ Kotlin is the sole implementation language for the Android application and its i
 The project deliberately does not introduce a Rust core or a Kotlin/Java-to-Rust FFI layer at this stage. Cross-language integration would add build, testing, packaging, and maintenance complexity without providing a capability that the Android application needs for the MVP.
 
 This decision can be revisited only if implementation evidence shows a concrete requirement that Kotlin cannot satisfy reasonably. Such a requirement must be documented rather than assumed from the idea that Java is "closer to the system."
+
+### Archive design
+
+Orpheus uses a **logical archive format** with an authoritative manifest and explicit artifact metadata. The file extension is `.orpheus`.
+
+For the MVP, the physical container may use **ZIP with DEFLATE compression**. ZIP is an implementation detail of the initial container, not a permanent commitment to the long-term archive representation. The logical format must remain separable from the physical container so a later container/compression strategy can be introduced without changing the meaning of existing archives.
+
+Encryption is **optional but strongly recommended**. When an archive contains sensitive domains, the UI should ask whether to enable encryption and, when the user declines, present a strong warning explaining that the portable archive will contain readable private data. Encrypted archives use a user-controlled password/key; external key sources may be added later.
+
+Deduplication and chunking are deferred until the basic backup/restore pipeline is working reliably.
+
+Archive format versioning is independent of the Orpheus application version so future releases can maintain backward compatibility.
+
+The archive is designed for **both preservation and migration**. Preservation is the underlying data model; restoration/migration workflows consume the same artifact and manifest structure.
 
 ### Minimum Android API
 
@@ -318,7 +333,6 @@ The following are outside the initial scope:
 
 These remain intentionally unresolved until implementation design is discussed:
 
-- exact archive container/compression choice
 - exact authenticated-encryption scheme and key-derivation parameters
 - concurrency and job-execution model
 - persistence mechanism for resumable jobs
