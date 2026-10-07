@@ -1,0 +1,264 @@
+# Orpheus Roadmap
+
+This roadmap prioritizes a reliable Android-first preservation workflow before adding deep privilege-dependent functionality.
+
+## Phase 0 — Specification
+
+Goal: establish contracts before implementation.
+
+- [ ] Define artifact model and capability statuses
+- [ ] Define backup lifecycle
+- [ ] Define archive layout and manifest schema
+- [ ] Define encryption and integrity requirements
+- [ ] Define restoration-plan semantics
+- [ ] Define minimum supported Android API level
+- [ ] Record known Android/OEM limitations
+- [ ] Decide implementation language
+
+Exit condition: architecture and archive contracts are stable enough that implementation can begin without inventing them ad hoc.
+
+## Phase 1 — Android skeleton
+
+Goal: a runnable Android application with no destructive behavior.
+
+- [ ] Android project structure
+- [ ] Application identity and package metadata
+- [ ] Device/Android information collector
+- [ ] Storage-space inspection
+- [ ] Capability model
+- [ ] Capability scan UI
+- [ ] Structured local logging
+- [ ] Test harness for capability results
+
+Exit condition:
+
+~~~text
+Orpheus
+  -> scans the device
+  -> reports capabilities
+  -> does not modify device state
+~~~
+
+## Phase 2 — File preservation
+
+Goal: reliably preserve user-accessible files.
+
+- [ ] User-selected directories
+- [ ] Media/file enumeration
+- [ ] Large-file streaming
+- [ ] Checksums
+- [ ] Archive writer
+- [ ] Manifest generation
+- [ ] Archive integrity verification
+- [ ] Interrupted-backup recovery
+- [ ] Storage estimation
+
+Exit condition:
+
+~~~text
+select files
+  -> archive
+  -> close archive
+  -> reopen archive
+  -> verify every artifact
+~~~
+
+## Phase 3 — Package preservation
+
+Goal: reconstruct the installed application set as far as Android permits.
+
+- [ ] Installed-package inventory
+- [ ] Package/version/signature metadata
+- [ ] Obtainable APK handling
+- [ ] Split APK handling
+- [ ] Package checksum verification
+- [ ] Runtime permission inventory where obtainable
+- [ ] Package restoration metadata
+- [ ] Unsupported-package reporting
+
+Exit condition: Orpheus can produce a verified description of the application installation set and preserve obtainable package artifacts.
+
+## Phase 4 — Shizuku integration
+
+Goal: make Android-only operation substantially more capable.
+
+- [ ] Detect Shizuku
+- [ ] Detect Shizuku backend privilege level
+- [ ] Request/check required permissions
+- [ ] Implement isolated Shizuku operations
+- [ ] Add shell-backed collectors
+- [ ] Record backend-specific capabilities
+- [ ] Test across multiple Android versions where possible
+
+Exit condition: all operations using Shizuku are capability-gated and degrade cleanly when Shizuku is absent or insufficiently privileged.
+
+## Phase 5 — Personal data
+
+Goal: preserve the user's own structured data through supported Android interfaces.
+
+Initial targets:
+
+- [ ] Contacts
+- [ ] SMS
+- [ ] Call history
+- [ ] Calendars
+- [ ] Other high-value user data with a stable public interface
+
+For each domain:
+
+- [ ] collector
+- [ ] normalized artifact schema
+- [ ] export
+- [ ] restore
+- [ ] post-restore verification
+- [ ] documented limitations
+
+Exit condition: each supported domain has an explicit completeness contract rather than an undocumented best effort.
+
+## Phase 6 — Prepare workflow
+
+Goal: turn the individual collectors into one safe pre-unlock workflow.
+
+~~~text
+SCAN
+  ↓
+SELECT
+  ↓
+ESTIMATE
+  ↓
+BACKUP
+  ↓
+VERIFY
+  ↓
+REVIEW LOSSES
+  ↓
+READY
+~~~
+
+Features:
+
+- [ ] Guided preparation flow
+- [ ] Preservation summary
+- [ ] Unresolved-item list
+- [ ] Archive integrity gate
+- [ ] "Ready for destructive operation" state
+- [ ] Optional external-copy recommendation
+- [ ] Recovery instructions
+
+Exit condition: a user can perform a complete verified preparation without needing to understand Orpheus internals.
+
+## Phase 7 — Fresh-device restoration
+
+Goal: restore onto a wiped/reinstalled Android environment.
+
+~~~text
+IMPORT ARCHIVE
+  ↓
+SCAN TARGET
+  ↓
+GENERATE RESTORE PLAN
+  ↓
+REVIEW
+  ↓
+RESTORE
+  ↓
+VERIFY
+  ↓
+REPORT
+~~~
+
+- [ ] Archive import
+- [ ] Target capability scan
+- [ ] Restore plan generation
+- [ ] Package installation
+- [ ] File restoration
+- [ ] Personal-data restoration
+- [ ] Partial/failed result handling
+- [ ] Post-restore verification
+- [ ] Final recovery report
+
+Exit condition: a supported device can be substantially reconstructed after a wipe using only the phone and required Android-side tooling.
+
+## Phase 8 — Root backend
+
+Goal: expand the preservation surface for users who already have root.
+
+- [ ] Root detection
+- [ ] Root capability provider
+- [ ] Additional protected-data collectors where legitimately accessible
+- [ ] Deeper application-data preservation
+- [ ] Root-aware restoration
+- [ ] Root-only capability documentation
+
+This phase must not change the baseline archive semantics.
+
+## Phase 9 — Termux / CLI
+
+Goal: make Orpheus scriptable and useful to advanced Android users.
+
+Example commands:
+
+~~~text
+orpheus scan
+orpheus backup
+orpheus verify backup.orpheus
+orpheus inspect backup.orpheus
+orpheus restore backup.orpheus
+~~~
+
+- [ ] CLI interface
+- [ ] Non-interactive mode
+- [ ] JSON output
+- [ ] Shell-friendly exit codes
+- [ ] Shared archive implementation
+- [ ] Termux packaging/documentation
+
+Exit condition: common backup and inspection tasks can be scripted from Termux.
+
+## Phase 10 — Desktop companion
+
+Optional future phase.
+
+- [ ] Desktop transport/backup target
+- [ ] ADB integration
+- [ ] Large-archive management
+- [ ] Cross-device migration
+- [ ] Desktop restore tooling
+
+A desktop companion should extend Orpheus rather than become a prerequisite for the Android workflow.
+
+## Phase 11 — Device/OEM adapters
+
+Only add an adapter when device-specific behavior provides real value.
+
+Potential areas:
+
+- Samsung
+- Pixel
+- Xiaomi
+- OnePlus
+- other OEM-specific package/storage behavior
+
+Adapters must remain optional and isolated from the generic backup format.
+
+## Quality gates
+
+Before calling the project safe for real-world backup use:
+
+- [ ] Every backup artifact has a checksum or documented verification method
+- [ ] Incomplete backups are visibly marked
+- [ ] Corruption tests exist
+- [ ] Interrupted operations have a defined recovery path
+- [ ] Restoration failures do not silently continue
+- [ ] Destructive-adjacent actions require explicit confirmation
+- [ ] Sensitive archives are authenticated and encrypted
+- [ ] Tests cover at least one normal Android configuration and one Shizuku-enabled configuration
+- [ ] Documentation clearly distinguishes tested behavior from theoretical capability
+
+## Explicitly not a milestone
+
+Orpheus will not have a milestone named "bypass factory reset" or "unlock without wiping."
+
+The project's success criterion is instead:
+
+> Given a destructive operation that cannot be avoided, preserve and reconstruct the maximum amount of user-controlled state that Android and the device legitimately permit.
