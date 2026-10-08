@@ -15,7 +15,7 @@ val hasCiSigning = listOf(
 
 android {
     namespace = "io.github.rightward.orpheus"
-    compileSdk = 37
+    compileSdk {\n        version = release(37) {\n            minorApiLevel = 0\n        }\n    }
 
     defaultConfig {
         applicationId = "io.github.rightward.orpheus"
