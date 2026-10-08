@@ -40,7 +40,7 @@ jobs:
       - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;37.0.0"
+          sdkmanager "platforms;android-37" "build-tools;37.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -106,7 +106,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK_NAME"
+          "$ANDROID_SDK_ROOT/build-tools/37.0.0/apksigner" verify --verbose --print-certs "$APK_NAME"
 
       - name: Upload debug test APK
         uses: actions/upload-artifact@v7.0.1
