@@ -51,7 +51,8 @@ class PackageMetadataCodecTest {
         val json = JSONObject(
             PackageMetadataCodec.encode(
                 packageInfo = packageInfo,
-                apkArtifacts = listOf(artifact)
+                apkArtifacts = listOf(artifact),
+                includeApkContent = true
             )
         )
 
