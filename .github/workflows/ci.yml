@@ -35,7 +35,7 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4.0.1
+        uses: android-actions/setup-android@v4.0.2
 
       - name: Install Android SDK packages
         run: |
@@ -67,7 +67,7 @@ jobs:
         with:
           name: Orpheus-debug
           path: |
-            dist/ShizuLog-debug.apk
-            dist/ShizuLog-debug.apk.sha256
+            dist/Orpheus-debug.apk
+            dist/Orpheus-debug.apk.sha256
           if-no-files-found: error
           retention-days: 3
