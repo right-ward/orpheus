@@ -25,6 +25,23 @@ android {
         versionName = "0.3.1"
     }
 
+    signingConfigs {
+        if (hasCiSigning) {
+            create("ciRelease") {
+                storeFile = file(ciKeystoreFile!!)
+                storePassword = ciKeystorePassword!!
+                keyAlias = ciKeyAlias!!
+                keyPassword = ciKeyPassword!!
+            }
+            create("ciDebug") {
+                storeFile = file(ciKeystoreFile!!)
+                storePassword = ciKeystorePassword!!
+                keyAlias = ciKeyAlias!!
+                keyPassword = ciKeyPassword!!
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
