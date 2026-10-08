@@ -679,20 +679,8 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun formatBytes(bytes: Long): String {
-        if (bytes < 1024L) return bytes.toString() + " B"
-
-        val units = arrayOf("KiB", "MiB", "GiB", "TiB")
-        var value = bytes.toDouble()
-        var unit = 0
-
-        while (value >= 1024.0 && unit < units.lastIndex) {
-            value /= 1024.0
-            unit++
-        }
-
-        return String.format(Locale.US, "%.1f %s", value, units[unit])
-    }
+    private fun formatBytes(bytes: Long): String =
+        ByteFormatter.format(bytes)
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).roundToInt()
