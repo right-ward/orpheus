@@ -2,6 +2,17 @@ plugins {
     id("com.android.application")
 }
 
+val ciKeystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
+val ciKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val ciKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+val ciKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+val hasCiSigning = listOf(
+    ciKeystoreFile,
+    ciKeystorePassword,
+    ciKeyAlias,
+    ciKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "io.github.rightward.orpheus"
     compileSdk = 37
@@ -17,6 +28,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasCiSigning) {
+                signingConfig = signingConfigs.getByName("ciRelease")
+            }
         }
     }
 
