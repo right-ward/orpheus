@@ -69,5 +69,9 @@ class PackageMetadataCodecTest {
             json.getJSONObject("restore")
                 .getBoolean("requires_signature_match")
         )
+        assertTrue(
+            json.getJSONObject("apk_content_preservation")
+                .getBoolean("enabled")
+        )
     }
 }

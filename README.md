@@ -19,7 +19,9 @@ The current app:
 - records interrupted/incomplete backup sessions
 - estimates selected content size before backup
 - inventories installed packages, version/signature metadata, runtime permission state, and package restore metadata
-- preserves obtainable base APKs and split APKs with per-artifact checksums
+- lets the user separately enable package metadata preservation and APK content preservation
+- lets the user preserve all visible packages or only an explicitly selected package set
+- preserves obtainable base APKs and split APKs with per-artifact checksums when APK preservation is enabled
 - reports packages whose APKs are unavailable or fail to read instead of hiding them
 - performs no restore or destructive operation
 

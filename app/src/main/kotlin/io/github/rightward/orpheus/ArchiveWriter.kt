@@ -37,6 +37,8 @@ class ArchiveWriter(
         outputUri: Uri,
         selectedTrees: List<SelectedTree>,
         includePackages: Boolean,
+        includePackageApks: Boolean,
+        selectedPackageNames: Set<String>?,
         listener: BackupProgressListener
     ): BackupWriteResult {
         require(selectedTrees.isNotEmpty() || includePackages) {
@@ -162,6 +164,8 @@ class ArchiveWriter(
                         val packageResult = PackageArchiveWriter().write(
                             zip = zip,
                             inventory = inventory,
+                            includeApkContent = includePackageApks,
+                            selectedPackageNames = selectedPackageNames,
                             listener = object : BackupProgressListener {
                                 override fun onPackageStarted(
                                     packageName: String

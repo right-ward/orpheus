@@ -229,6 +229,7 @@ The versioned metadata schema records, where Android exposes the information:
 - installer package when available
 - SHA-256 fingerprints of signing certificates
 - requested permissions and their current granted state
+- whether APK content preservation was enabled
 - references to preserved APK artifacts
 - restore constraints such as signature matching, user confirmation, and permission review
 

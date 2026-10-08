@@ -23,11 +23,20 @@ class PackageArchiveWriter {
     fun write(
         zip: ZipOutputStream,
         inventory: PackageInventory,
+        includeApkContent: Boolean,
+        selectedPackageNames: Set<String>?,
         listener: BackupProgressListener
     ): PackageBackupResult {
         val artifacts = ArrayList<ArchiveArtifact>()
+        val packages = if (selectedPackageNames == null) {
+            inventory.packages
+        } else {
+            inventory.packages.filter {
+                it.packageName in selectedPackageNames
+            }
+        }
 
-        inventory.packages.forEachIndexed { packageIndex, packageInfo ->
+        packages.forEachIndexed { packageIndex, packageInfo ->
             listener.onPackageStarted(packageInfo.packageName)
 
             val packageRoot =
@@ -35,7 +44,7 @@ class PackageArchiveWriter {
                     ArchivePath.sanitizeComponent(packageInfo.packageName)
             val packageApkArtifacts = ArrayList<ArchiveArtifact>()
 
-            if (packageInfo.shouldPreserveApks) {
+            if (includeApkContent && packageInfo.shouldPreserveApks) {
                 packageApkArtifacts += writeApk(
                     zip = zip,
                     packageIndex = packageIndex + 1,
@@ -73,7 +82,8 @@ class PackageArchiveWriter {
             val metadataPath = packageRoot + "/metadata.json"
             val metadata = PackageMetadataCodec.encode(
                 packageInfo = packageInfo,
-                apkArtifacts = packageApkArtifacts
+                apkArtifacts = packageApkArtifacts,
+                includeApkContent = includeApkContent
             )
             val metadataBytes = metadata.toByteArray(Charsets.UTF_8)
             val metadataDigest = Sha256.digest(metadataBytes)
@@ -97,7 +107,7 @@ class PackageArchiveWriter {
         }
 
         return PackageBackupResult(
-            packageCount = inventory.packageCount,
+            packageCount = packages.size,
             artifacts = artifacts
         )
     }
@@ -216,7 +226,8 @@ object PackageMetadataCodec {
 
     fun encode(
         packageInfo: InstalledPackage,
-        apkArtifacts: List<ArchiveArtifact>
+        apkArtifacts: List<ArchiveArtifact>,
+        includeApkContent: Boolean
     ): String {
         val permissions = JSONArray()
         packageInfo.requestedPermissions.forEach { permission ->
@@ -265,6 +276,10 @@ object PackageMetadataCodec {
                 JSONArray(packageInfo.signingCertificateSha256)
             )
             .put("requested_permissions", permissions)
+            .put(
+                "apk_content_preservation",
+                JSONObject().put("enabled", includeApkContent)
+            )
             .put("apk_artifacts", apks)
             .put(
                 "restore",
