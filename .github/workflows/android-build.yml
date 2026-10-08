@@ -34,7 +34,7 @@ on:
         type: string
 
 concurrency:
-  group: ${ github.ref }}-${ inputs.action }}-${ inputs.source }}-${ inputs.target }}-${ inputs.release }}
+  group: ${{ github.ref }}-${{ inputs.action }}-${{ inputs.source }}-${{ inputs.target }}-${{ inputs.release }}
   cancel-in-progress: true
 
 permissions:
@@ -45,17 +45,17 @@ jobs:
     name: Prepare Android build matrix
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${ steps.matrix.outputs.matrix }}
-      source_ref: ${ steps.version.outputs.source_ref }}
-      artifact_ref: ${ steps.version.outputs.artifact_ref }}
-      version: ${ steps.version.outputs.version }}
-      version_code: ${ steps.version.outputs.version_code }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      source_ref: ${{ steps.version.outputs.source_ref }}
+      artifact_ref: ${{ steps.version.outputs.artifact_ref }}
+      version: ${{ steps.version.outputs.version }}
+      version_code: ${{ steps.version.outputs.version_code }}
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v7.0.1
         with:
-          ref: ${ github.event_name == 'workflow_dispatch' && inputs.source || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.source || github.ref }}
           fetch-depth: 0
 
       - name: Validate release target
@@ -64,9 +64,9 @@ jobs:
           (github.event_name == 'workflow_dispatch' && inputs.action == 'release')
         shell: bash
         env:
-          ACTION: ${ inputs.action }}
-          RELEASE_TAG: ${ github.event_name == 'workflow_dispatch' && inputs.release || github.ref_name }}
-          GH_TOKEN: ${ github.token }}
+          ACTION: ${{ inputs.action }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -99,14 +99,14 @@ jobs:
         id: version
         shell: bash
         env:
-          ACTION: ${ inputs.action }}
-          SOURCE: ${ inputs.source }}
-          RELEASE_TAG: ${ github.event_name == 'workflow_dispatch' && inputs.release || github.ref_name }}
+          ACTION: ${{ inputs.action }}
+          SOURCE: ${{ inputs.source }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release || github.ref_name }}
         run: |
           set -euo pipefail
 
-          source_ref="\${SOURCE:-$GITHUB_REF}"
-          artifact_ref="\${SOURCE:-$GITHUB_REF_NAME}"
+          source_ref="${SOURCE:-$GITHUB_REF}"
+          artifact_ref="${SOURCE:-$GITHUB_REF_NAME}"
 
           version_name="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -n1)"
           version_code="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)/\1/p' app/build.gradle.kts | head -n1)"
@@ -119,14 +119,14 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             source_ref="$GITHUB_REF"
             artifact_ref="$GITHUB_REF_NAME"
-            expected_version="\${artifact_ref#v}"
+            expected_version="${artifact_ref#v}"
             if [[ "$version_name" != "$expected_version" ]]; then
               echo "Tag $artifact_ref does not match app versionName $version_name."
               exit 1
             fi
           elif [[ "$ACTION" == "release" ]]; then
             artifact_ref="$RELEASE_TAG"
-            expected_version="\${RELEASE_TAG#v}"
+            expected_version="${RELEASE_TAG#v}"
             if [[ "$version_name" != "$expected_version" ]]; then
               echo "Release tag $RELEASE_TAG does not match app versionName $version_name."
               exit 1
@@ -144,8 +144,8 @@ jobs:
         id: matrix
         shell: bash
         env:
-          TARGET: ${ inputs.target }}
-          ACTION: ${ inputs.action }}
+          TARGET: ${{ inputs.target }}
+          ACTION: ${{ inputs.action }}
         run: |
           set -euo pipefail
 
@@ -167,18 +167,18 @@ jobs:
           echo "matrix={\"include\":$matrix}" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Android ${ matrix.arch }} APK
+    name: Android ${{ matrix.arch }} APK
     needs: prepare
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix: ${ fromJSON(needs.prepare.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v7.0.1
         with:
-          ref: ${ needs.prepare.outputs.source_ref }}
+          ref: ${{ needs.prepare.outputs.source_ref }}
           fetch-depth: 0
 
       - name: Set up JDK 17
@@ -205,10 +205,10 @@ jobs:
       - name: Prepare signing keystore
         shell: bash
         env:
-          ANDROID_KEYSTORE_BASE64: ${ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -236,9 +236,9 @@ jobs:
 
       - name: Build signed APK
         env:
-          ANDROID_ABI: ${ matrix.abi }}
-          ANDROID_VERSION_NAME: ${ needs.prepare.outputs.version }}
-          ANDROID_VERSION_CODE: ${ needs.prepare.outputs.version_code }}
+          ANDROID_ABI: ${{ matrix.abi }}
+          ANDROID_VERSION_NAME: ${{ needs.prepare.outputs.version }}
+          ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.version_code }}
         shell: bash
         run: |
           set -euo pipefail
@@ -250,9 +250,9 @@ jobs:
             exit 1
           fi
 
-          safe_ref="${ needs.prepare.outputs.artifact_ref }}"
-          safe_ref="\${safe_ref//\\//-}"
-          apk_name="orpheus-$safe_ref-android-${ matrix.arch }}.apk"
+          safe_ref="${{ needs.prepare.outputs.artifact_ref }}"
+          safe_ref="${safe_ref//\\//-}"
+          apk_name="orpheus-$safe_ref-android-${{ matrix.arch }}.apk"
           cp "$apk" "$apk_name"
           echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
 
@@ -265,8 +265,8 @@ jobs:
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: ${ env.APK_NAME }}
-          path: ${ env.APK_NAME }}
+          name: ${{ env.APK_NAME }}
+          path: ${{ env.APK_NAME }}
           if-no-files-found: error
           retention-days: 3
           archive: false
@@ -280,21 +280,21 @@ jobs:
           {
             printf '%s\n' \
               "platform=android" \
-              "arch=${ matrix.arch }}" \
-              "abi=${ matrix.abi }}" \
-              "target=${ matrix.target }}" \
-              "source_ref=${ needs.prepare.outputs.source_ref }}" \
-              "artifact_ref=${ needs.prepare.outputs.artifact_ref }}" \
-              "version=${ needs.prepare.outputs.version }}"
-          } > "android-build-${ matrix.arch }}.txt"
-          tar caf "android-build-log-${ matrix.arch }}.tar.xz" "android-build-${ matrix.arch }}.txt"
+              "arch=${{ matrix.arch }}" \
+              "abi=${{ matrix.abi }}" \
+              "target=${{ matrix.target }}" \
+              "source_ref=${{ needs.prepare.outputs.source_ref }}" \
+              "artifact_ref=${{ needs.prepare.outputs.artifact_ref }}" \
+              "version=${{ needs.prepare.outputs.version }}"
+          } > "android-build-${{ matrix.arch }}.txt"
+          tar caf "android-build-log-${{ matrix.arch }}.tar.xz" "android-build-${{ matrix.arch }}.txt"
 
       - name: Upload Android build metadata
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: android-build-log-${ matrix.arch }}
-          path: android-build-log-${ matrix.arch }}.tar.xz
+          name: android-build-log-${{ matrix.arch }}
+          path: android-build-log-${{ matrix.arch }}.tar.xz
           if-no-files-found: error
           retention-days: 3
           archive: false
@@ -320,8 +320,8 @@ jobs:
 
       - name: Publish APKs and remove legacy Android archives
         env:
-          GH_TOKEN: ${ github.token }}
-          TAG_NAME: ${ github.event_name == 'workflow_dispatch' && inputs.release || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release || github.ref_name }}
         shell: bash
         run: |
           set -euo pipefail
