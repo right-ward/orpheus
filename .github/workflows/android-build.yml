@@ -17,6 +17,7 @@ on:
       source:
         description: Source branch
         required: true
+        default: main
         type: string
       target:
         description: Architecture
@@ -33,11 +34,11 @@ on:
         type: string
 
 concurrency:
-  group: android-${{ github.ref }}-${{ inputs.action }}-${{ inputs.source }}-${{ inputs.target }}-${{ inputs.release }}
+  group: ${{ github.ref }}-${{ inputs.action }}-${{ inputs.source }}-${{ inputs.target }}-${{ inputs.release }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   prepare:
@@ -93,6 +94,51 @@ jobs:
               exit 1
             fi
           fi
+
+      - name: Resolve build metadata
+        id: version
+        shell: bash
+        env:
+          ACTION: ${{ inputs.action }}
+          SOURCE: ${{ inputs.source }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          source_ref="${SOURCE:-$GITHUB_REF}"
+          artifact_ref="${SOURCE:-$GITHUB_REF_NAME}"
+
+          version_name="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -n1)"
+          version_code="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)/\1/p' app/build.gradle.kts | head -n1)"
+
+          if [[ -z "$version_name" || -z "$version_code" ]]; then
+            echo "Could not resolve versionName/versionCode from app/build.gradle.kts."
+            exit 1
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            source_ref="$GITHUB_REF"
+            artifact_ref="$GITHUB_REF_NAME"
+            expected_version="${artifact_ref#v}"
+            if [[ "$version_name" != "$expected_version" ]]; then
+              echo "Tag $artifact_ref does not match app versionName $version_name."
+              exit 1
+            fi
+          elif [[ "$ACTION" == "release" ]]; then
+            artifact_ref="$RELEASE_TAG"
+            expected_version="${RELEASE_TAG#v}"
+            if [[ "$version_name" != "$expected_version" ]]; then
+              echo "Release tag $RELEASE_TAG does not match app versionName $version_name."
+              exit 1
+            fi
+          fi
+
+          {
+            echo "source_ref=$source_ref"
+            echo "artifact_ref=$artifact_ref"
+            echo "version=$version_name"
+            echo "version_code=$version_code"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Prepare matrix
         id: matrix
@@ -159,7 +205,6 @@ jobs:
       - name: Prepare signing keystore
         shell: bash
         env:
-          ACTION: ${{ inputs.action }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -167,87 +212,37 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ "$GITHUB_EVENT_NAME" == "push" || "$ACTION" == "release" ]]; then
-            if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
-              echo "Android release signing secrets are not configured."
-              echo "Required: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD."
-              exit 1
-            fi
-
-            keystore_file="$RUNNER_TEMP/orpheus-release.keystore"
-            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_file"
-          else
-            if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]; then
-              keystore_file="$RUNNER_TEMP/orpheus-release.keystore"
-              printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_file"
-            else
-              keystore_file="$RUNNER_TEMP/orpheus-release.keystore"
-              store_password="$(openssl rand -hex 24)"
-              key_password="$(openssl rand -hex 24)"
-              key_alias="orpheus-ci"
-              keytool -genkeypair -noprompt \
-                -keystore "$keystore_file" \
-                -storepass "$store_password" \
-                -keypass "$key_password" \
-                -alias "$key_alias" \
-                -keyalg RSA \
-                -keysize 2048 \
-                -validity 1 \
-                -dname "CN=Orpheus CI,O=Right Ward,C=XX"
-
-              echo "ANDROID_KEYSTORE_PASSWORD=$store_password" >> "$GITHUB_ENV"
-              echo "ANDROID_KEY_ALIAS=$key_alias" >> "$GITHUB_ENV"
-              echo "ANDROID_KEY_PASSWORD=$key_password" >> "$GITHUB_ENV"
-            fi
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
+            echo "Android CI signing secrets are not configured."
+            echo "Required: ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD."
+            exit 1
           fi
 
-          echo "ANDROID_KEYSTORE_FILE=$keystore_file" >> "$GITHUB_ENV"
-          if [[ -n "$ANDROID_KEYSTORE_PASSWORD" ]]; then echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"; fi
-          if [[ -n "$ANDROID_KEY_ALIAS" ]]; then echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"; fi
-          if [[ -n "$ANDROID_KEY_PASSWORD" ]]; then echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"; fi
+          keystore_file="$RUNNER_TEMP/orpheus-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_file"
+          chmod 600 "$keystore_file"
+
+          keytool -list \
+            -keystore "$keystore_file" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null
+
+          {
+            echo "ANDROID_KEYSTORE_FILE=$keystore_file"
+            echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
+            echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS"
+            echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
 
       - name: Build signed APK
-        shell: bash
         env:
           ANDROID_ABI: ${{ matrix.abi }}
           ANDROID_VERSION_NAME: ${{ needs.prepare.outputs.version }}
           ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.version_code }}
-        working-directory: android
+        shell: bash
         run: |
-          set -o pipefail
-          cat > "$RUNNER_TEMP/android-packaging-diagnostics.init.gradle" <<'EOF'
-          allprojects { project ->
-              project.plugins.withId("com.android.application") {
-                  project.afterEvaluate {
-                      def android = project.extensions.findByName("android")
-                      if (android != null) {
-                          try {
-                              println "[CI][android-packaging] DSL jniLibs.useLegacyPackaging=${android.packaging.jniLibs.useLegacyPackaging}"
-                          } catch (Exception e) {
-                              println "[CI][android-packaging] Could not read DSL jniLibs.useLegacyPackaging: ${e.class.simpleName}: ${e.message}"
-                          }
-                      }
-                  }
-
-                  def components = project.extensions.findByName("androidComponents")
-                  if (components == null) {
-                      println "[CI][android-packaging] androidComponents extension not found"
-                  } else {
-                      println "[CI][android-packaging] androidComponents extension found"
-                      components.onVariants(components.selector().withBuildType("release")) { variant ->
-                          try {
-                              def property = variant.packaging.jniLibs.useLegacyPackaging
-                              println "[CI][android-packaging] variant=${variant.name} JniLibsApkPackaging.useLegacyPackaging present=${property.isPresent()} value=${property.isPresent() ? property.get() : '<unset>'}"
-                          } catch (Exception e) {
-                              println "[CI][android-packaging] Could not read release variant JNI packaging property: ${e.class.simpleName}: ${e.message}"
-                          }
-                      }
-                  }
-              }
-          }
-          EOF
-
-          gradle --no-daemon --stacktrace --info --warning-mode all --console=plain             --init-script "$RUNNER_TEMP/android-packaging-diagnostics.init.gradle"             :app:assembleRelease 2>&1 | tee ../android-build.log
+          set -euo pipefail
+          gradle --no-daemon --stacktrace --warning-mode all :app:assembleRelease
 
           apk="app/build/outputs/apk/release/app-release.apk"
           if [[ ! -f "$apk" ]]; then
@@ -256,18 +251,16 @@ jobs:
           fi
 
           safe_ref="${{ needs.prepare.outputs.artifact_ref }}"
-          safe_ref="${safe_ref//\//-}"
-          apk_name="orpheus-${safe_ref}-android-${{ matrix.arch }}.apk"
-          cp "$apk" "../$apk_name"
+          safe_ref="${safe_ref//\\//-}"
+          apk_name="orpheus-$safe_ref-android-${{ matrix.arch }}.apk"
+          cp "$apk" "$apk_name"
           echo "APK_NAME=$apk_name" >> "$GITHUB_ENV"
-          echo "Created $apk_name" | tee -a ../android-build.log
 
       - name: Verify APK signature
-        working-directory: android
         shell: bash
         run: |
           set -euo pipefail
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose "../$APK_NAME"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK_NAME"
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v7.0.1
@@ -279,7 +272,7 @@ jobs:
           archive: false
           overwrite: true
 
-      - name: Archive Android build log
+      - name: Archive Android build metadata
         if: always()
         shell: bash
         run: |
@@ -293,14 +286,14 @@ jobs:
               "source_ref=${{ needs.prepare.outputs.source_ref }}" \
               "artifact_ref=${{ needs.prepare.outputs.artifact_ref }}" \
               "version=${{ needs.prepare.outputs.version }}"
-            cat android-build.log 2>/dev/null || true
-          } > android-build-${{ matrix.arch }}.txt
-          tar caf android-build-log-${{ matrix.arch }}.tar.xz android-build-${{ matrix.arch }}.txt
+          } > "android-build-${{ matrix.arch }}.txt"
+          tar caf "android-build-log-${{ matrix.arch }}.tar.xz" "android-build-${{ matrix.arch }}.txt"
 
-      - name: Upload Android build log
+      - name: Upload Android build metadata
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
+          name: android-build-log-${{ matrix.arch }}
           path: android-build-log-${{ matrix.arch }}.tar.xz
           if-no-files-found: error
           retention-days: 3
@@ -348,9 +341,8 @@ jobs:
           fi
 
           for asset in \
-            "orpheus-${TAG_NAME}-android-x86_64.tar.xz" \
-            "orpheus-${TAG_NAME}-android-aarch64.tar.xz" \
-            "orpheus-${TAG_NAME}-android-armv7.tar.xz"; do
+            "orpheus-$TAG_NAME-android-x86_64.tar.xz" \
+            "orpheus-$TAG_NAME-android-aarch64.tar.xz" \
+            "orpheus-$TAG_NAME-android-armv7.tar.xz"; do
             gh release delete-asset "$TAG_NAME" "$asset" --yes --repo "$GITHUB_REPOSITORY" || true
           done
-
