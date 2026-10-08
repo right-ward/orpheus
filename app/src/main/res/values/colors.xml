@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="orpheus_bg">#171727</color>
+    <color name="orpheus_surface">#202035</color>
+    <color name="orpheus_surface_strong">#262640</color>
+    <color name="orpheus_accent">#AFA7FF</color>
+    <color name="orpheus_button">#7067B5</color>
+    <color name="orpheus_text_primary">#F4F2FF</color>
+    <color name="orpheus_text_secondary">#BAB7CB</color>
+    <color name="orpheus_text_muted">#89869D</color>
+    <color name="orpheus_success">#80E0AF</color>
+    <color name="orpheus_warning">#FFC96B</color>
+    <color name="orpheus_error">#FF8B9A</color>
+</resources>

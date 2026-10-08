@@ -6,16 +6,19 @@ Orpheus is an Android-first preservation and migration tool. It does not try to 
 
 ## Current status
 
-Phase 1 — Android skeleton.
+Phase 2 — File preservation.
 
 The current app:
 
-- reports basic device and Android metadata
-- inspects storage capacity
-- exposes the initial capability model
-- provides structured local logging
-- has host-side tests for the capability model
-- performs no backup, restore, or destructive operation
+- uses a dark, high-contrast Android UI
+- lets the user select folders through Android's document picker
+- enumerates selected document trees
+- streams files into a `.orpheus` ZIP/DEFLATE container
+- records per-file SHA-256 checksums and a logical manifest
+- verifies the finished archive by reopening and hashing its file entries
+- records interrupted/incomplete backup sessions
+- estimates selected content size before backup
+- performs no restore or destructive operation
 
 Minimum Android API: 26 (Android 8.0 / Oreo).
 
