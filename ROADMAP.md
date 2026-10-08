@@ -67,14 +67,14 @@ select files
 
 Goal: reconstruct the installed application set as far as Android permits.
 
-- [ ] Installed-package inventory
-- [ ] Package/version/signature metadata
-- [ ] Obtainable APK handling
-- [ ] Split APK handling
-- [ ] Package checksum verification
-- [ ] Runtime permission inventory where obtainable
-- [ ] Package restoration metadata
-- [ ] Unsupported-package reporting
+- [x] Installed-package inventory
+- [x] Package/version/signature metadata
+- [x] Obtainable APK handling
+- [x] Split APK handling
+- [x] Package checksum verification
+- [x] Runtime permission inventory where obtainable
+- [x] Package restoration metadata
+- [x] Unsupported-package reporting
 
 Exit condition: Orpheus can produce a verified description of the application installation set and preserve obtainable package artifacts.
 

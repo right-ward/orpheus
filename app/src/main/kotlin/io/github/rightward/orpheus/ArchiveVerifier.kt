@@ -68,7 +68,7 @@ class ArchiveVerifier(
                         }
 
                         else -> {
-                            if (entry.name.startsWith(ArchivePaths.FILES_PREFIX)) {
+                            if (isArtifactPath(entry.name)) {
                                 val digest = Sha256.newDigest()
                                 val buffer = ByteArray(64 * 1024)
                                 var size = 0L
@@ -117,20 +117,39 @@ class ArchiveVerifier(
                 )
 
             val expectedFiles = manifest.artifacts
-                .filter { it.status != ArtifactStatus.FAILED }
+                .filter { it.status.expectsPayload() }
                 .associateBy { it.archivePath }
+
+            val failedPaths = manifest.artifacts
+                .filter { it.status == ArtifactStatus.FAILED }
+                .map { it.archivePath }
+                .toSet()
 
             val failedArtifacts = manifest.artifacts.count {
                 it.status == ArtifactStatus.FAILED
             }
 
-            if (expectedFiles.size != actualFiles.size) {
+            val missingPaths = expectedFiles.keys - actualFiles.keys
+            if (missingPaths.isNotEmpty()) {
                 return ArchiveVerificationResult(
                     valid = false,
                     artifactCount = manifest.artifacts.size,
                     verifiedBytes = verifiedBytes,
                     failedArtifacts = failedArtifacts,
-                    error = "Manifest/file entry count mismatch."
+                    error = "Missing artifact: " + missingPaths.first()
+                )
+            }
+
+            val unexpectedPaths =
+                actualFiles.keys - expectedFiles.keys - failedPaths
+            if (unexpectedPaths.isNotEmpty()) {
+                return ArchiveVerificationResult(
+                    valid = false,
+                    artifactCount = manifest.artifacts.size,
+                    verifiedBytes = verifiedBytes,
+                    failedArtifacts = failedArtifacts,
+                    error = "Unexpected artifact entry: " +
+                        unexpectedPaths.first()
                 )
             }
 
@@ -183,6 +202,21 @@ class ArchiveVerifier(
             )
         }
     }
+
+    private fun ArtifactStatus.expectsPayload(): Boolean =
+        when (this) {
+            ArtifactStatus.RESTORABLE,
+            ArtifactStatus.PARTIAL -> true
+            ArtifactStatus.REQUIRES_PRIVILEGE,
+            ArtifactStatus.UNAVAILABLE,
+            ArtifactStatus.FAILED -> false
+        }
+
+    private fun isArtifactPath(path: String): Boolean =
+        path.startsWith(ArchivePaths.FILES_PREFIX) ||
+            path.startsWith(ArchivePaths.PACKAGES_PREFIX) ||
+            path.startsWith(ArchivePaths.DATA_PREFIX) ||
+            path.startsWith(ArchivePaths.EXPORTS_PREFIX)
 
     private fun ZipInputStream.readEntryText(
         maxBytes: Int = 32 * 1024 * 1024

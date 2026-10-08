@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import java.util.Locale
 import java.util.concurrent.ExecutorService
@@ -25,11 +26,16 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var selectionText: TextView
     private lateinit var estimateText: TextView
+    private lateinit var packageSummaryText: TextView
+    private lateinit var packageEstimateText: TextView
 
     private val sessionStore by lazy { BackupSessionStore(applicationContext) }
     private val selectedTrees = ArrayList<SelectedTree>()
 
     private var lastEstimate: EstimateResult? = null
+    private var packageInventory: PackageInventory? = null
+    private var packageScanInProgress = false
+    private var includePackagePreservation = true
 
     private val backgroundColor by lazy { getColor(R.color.orpheus_bg) }
     private val surfaceColor by lazy { getColor(R.color.orpheus_surface) }
@@ -69,6 +75,7 @@ class MainActivity : Activity() {
         )
 
         render()
+        scanPackages()
     }
 
     override fun onDestroy() {
@@ -97,7 +104,7 @@ class MainActivity : Activity() {
         root.addView(
             makeHeader(
                 title = "Orpheus",
-                subtitle = "Android preservation · Phase 2"
+                subtitle = "Android preservation · Phase 3"
             )
         )
 
@@ -125,15 +132,19 @@ class MainActivity : Activity() {
 
             addSpacer(8)
 
-            val selectButton = makeButton("Select folder") {
-                openFolderPicker()
-            }
-            addView(selectButton)
+            addView(
+                makeButton("Select folder") {
+                    openFolderPicker()
+                }
+            )
+
+            addSpacer(4)
 
             val backupButton = makeButton("Create verified backup") {
                 openArchiveCreator()
             }.apply {
-                isEnabled = selectedTrees.isNotEmpty()
+                isEnabled = selectedTrees.isNotEmpty() ||
+                    includePackagePreservation
                 alpha = if (isEnabled) 1.0f else 0.45f
             }
             addView(backupButton)
@@ -145,6 +156,57 @@ class MainActivity : Activity() {
                 primary = true
             )
             applyStatusColor(statusText, backupStatusColor())
+        }
+
+        addSpacer(12)
+
+        addCard {
+            addSectionTitle("PACKAGE PRESERVATION")
+            addBody(
+                "Record the installed application set, runtime permission state, " +
+                    "signing certificates, and obtainable APKs. System APKs are " +
+                    "cataloged but only user-installed or updated APKs are copied."
+            )
+
+            addSpacer(8)
+
+            packageSummaryText = addBody(
+                packageSummary(),
+                primary = true
+            )
+
+            packageEstimateText = addBody(
+                packageEstimateSummary(),
+                primary = false
+            )
+
+            addSpacer(6)
+
+            addView(
+                Switch(this@MainActivity).apply {
+                    text = "Preserve installed apps"
+                    isChecked = includePackagePreservation
+                    setTextColor(primaryTextColor)
+                    setOnCheckedChangeListener { _, checked ->
+                        includePackagePreservation = checked
+                    }
+                }
+            )
+
+            addView(
+                makeSecondaryButton(
+                    if (packageScanInProgress) {
+                        "Scanning installed apps…"
+                    } else {
+                        "Rescan installed apps"
+                    }
+                ) {
+                    scanPackages()
+                }.apply {
+                    isEnabled = !packageScanInProgress
+                    alpha = if (isEnabled) 1.0f else 0.45f
+                }
+            )
         }
 
         addSpacer(12)
@@ -232,6 +294,76 @@ class MainActivity : Activity() {
                 addBody(capability.detail, primary = false)
             }
         }
+    }
+
+    private fun scanPackages() {
+        if (packageScanInProgress) return
+
+        packageScanInProgress = true
+        render()
+
+        executor.submit {
+            try {
+                val inventory = PackageInventoryCollector(packageManager)
+                    .collect()
+
+                runOnUiThread {
+                    packageInventory = inventory
+                    packageScanInProgress = false
+                    render()
+                }
+            } catch (error: Exception) {
+                logger.warn(
+                    "Package inventory scan failed: " +
+                        (error.message ?: error.javaClass.simpleName)
+                )
+
+                runOnUiThread {
+                    packageInventory = null
+                    packageScanInProgress = false
+                    render()
+                    setStatus(
+                        "Package inventory failed: " +
+                            (error.message ?: error.javaClass.simpleName),
+                        errorColor
+                    )
+                }
+            }
+        }
+    }
+
+    private fun packageSummary(): String {
+        if (packageScanInProgress) {
+            return "Package inventory: scanning…"
+        }
+
+        val inventory = packageInventory
+            ?: return "Package inventory: not scanned yet."
+
+        val missing = if (inventory.packagesWithoutReadableBaseApk > 0) {
+            " · " + inventory.packagesWithoutReadableBaseApk +
+                " base APKs unavailable"
+        } else {
+            ""
+        }
+
+        return "Installed packages: " +
+            inventory.packageCount +
+            " visible · " +
+            inventory.obtainableApkCount +
+            " APKs obtainable" +
+            missing
+    }
+
+    private fun packageEstimateSummary(): String {
+        val inventory = packageInventory
+            ?: return "Obtainable APK content: not scanned yet."
+
+        return "Obtainable APK content: " +
+            formatBytes(inventory.obtainableApkBytes) +
+            " · " +
+            inventory.preservablePackages +
+            " packages eligible for APK preservation"
     }
 
     private fun makeHeader(title: String, subtitle: String): View {
@@ -451,8 +583,11 @@ class MainActivity : Activity() {
     }
 
     private fun openArchiveCreator() {
-        if (selectedTrees.isEmpty()) {
-            setStatus("Select at least one folder first.", warningColor)
+        if (selectedTrees.isEmpty() && !includePackagePreservation) {
+            setStatus(
+                "Select a folder or enable installed-app preservation.",
+                warningColor
+            )
             return
         }
 
@@ -468,6 +603,7 @@ class MainActivity : Activity() {
 
     private fun startBackup(outputUri: Uri) {
         val roots = selectedTrees.toList()
+        val preservePackages = includePackagePreservation
         sessionStore.markRunning(outputUri.toString())
 
         render()
@@ -481,10 +617,17 @@ class MainActivity : Activity() {
                 val writer = ArchiveWriter(
                     resolver = contentResolver,
                     deviceInfo = device,
-                    capabilities = capabilities
+                    capabilities = capabilities,
+                    packageManager = packageManager
                 )
 
                 val progress = object : BackupProgressListener {
+                    override fun onPackageStarted(packageName: String) {
+                        runOnUiThread {
+                            statusText.text = "Preserving package " + packageName
+                        }
+                    }
+
                     override fun onFileStarted(path: String) {
                         runOnUiThread {
                             statusText.text = "Backing up " + path
@@ -504,7 +647,12 @@ class MainActivity : Activity() {
                     }
                 }
 
-                writer.write(outputUri, roots, progress)
+                writer.write(
+                    outputUri = outputUri,
+                    selectedTrees = roots,
+                    includePackages = preservePackages,
+                    listener = progress
+                )
 
                 val verification = ArchiveVerifier(contentResolver)
                     .verify(outputUri)

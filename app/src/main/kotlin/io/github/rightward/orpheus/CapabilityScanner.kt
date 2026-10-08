@@ -28,7 +28,7 @@ class CapabilityScanner {
                     id = CapabilityId.SHARED_STORAGE_ENUMERATION,
                     provider = normal,
                     availability = CapabilityAvailability.NOT_IMPLEMENTED,
-                    detail = "Full user-storage enumeration is deferred to file-preservation work."
+                    detail = "Full user-storage enumeration beyond explicitly selected document trees is not implemented."
                 ),
                 Capability(
                     id = CapabilityId.PACKAGE_INVENTORY,
