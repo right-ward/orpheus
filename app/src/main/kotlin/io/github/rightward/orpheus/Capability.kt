@@ -22,6 +22,7 @@ enum class CapabilityId(
     USER_SELECTED_FILE_ACCESS("User-selected file access"),
     SHARED_STORAGE_ENUMERATION("Shared-storage enumeration"),
     PACKAGE_INVENTORY("Package inventory"),
+    PACKAGE_APK_PRESERVATION("Package APK preservation"),
     SHIZUKU_BACKEND("Shizuku backend"),
     ROOT_BACKEND("Root backend")
 }

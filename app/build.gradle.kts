@@ -15,14 +15,14 @@ val hasCiSigning = listOf(
 
 android {
     namespace = "io.github.rightward.orpheus"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.rightward.orpheus"
         minSdk = 26
-        targetSdk = 37
-        versionCode = 3
-        versionName = "0.2.1"
+        targetSdk = 36
+        versionCode = 4
+        versionName = "0.3.1"
     }
 
     signingConfigs {
@@ -33,14 +33,26 @@ android {
                 keyAlias = ciKeyAlias!!
                 keyPassword = ciKeyPassword!!
             }
+            create("ciDebug") {
+                storeFile = file(ciKeystoreFile!!)
+                storePassword = ciKeystorePassword!!
+                keyAlias = ciKeyAlias!!
+                keyPassword = ciKeyPassword!!
+            }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             if (hasCiSigning) {
                 signingConfig = signingConfigs.getByName("ciRelease")
+            }
+        }
+        debug {
+            isMinifyEnabled = false
+            if (hasCiSigning) {
+                signingConfig = signingConfigs.getByName("ciDebug")
             }
         }
     }
@@ -53,4 +65,5 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20260814")
 }

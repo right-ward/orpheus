@@ -2,16 +2,19 @@ package io.github.rightward.orpheus
 
 import android.app.Activity
 import android.content.Intent
+import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import java.util.Locale
 import java.util.concurrent.ExecutorService
@@ -25,11 +28,20 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var selectionText: TextView
     private lateinit var estimateText: TextView
+    private lateinit var packageSummaryText: TextView
+    private lateinit var packageEstimateText: TextView
 
     private val sessionStore by lazy { BackupSessionStore(applicationContext) }
     private val selectedTrees = ArrayList<SelectedTree>()
 
     private var lastEstimate: EstimateResult? = null
+    private var packageInventory: PackageInventory? = null
+    private var packageScanInProgress = false
+    private var includePackagePreservation = true
+    private var includePackageContent = true
+    private var preserveOnlySelectedPackages = false
+    private var selectedPackageNames = linkedSetOf<String>()
+    private var packageSelectionInitialized = false
 
     private val backgroundColor by lazy { getColor(R.color.orpheus_bg) }
     private val surfaceColor by lazy { getColor(R.color.orpheus_surface) }
@@ -69,6 +81,7 @@ class MainActivity : Activity() {
         )
 
         render()
+        scanPackages()
     }
 
     override fun onDestroy() {
@@ -97,7 +110,7 @@ class MainActivity : Activity() {
         root.addView(
             makeHeader(
                 title = "Orpheus",
-                subtitle = "Android preservation · Phase 2"
+                subtitle = "Android preservation · Phase 3"
             )
         )
 
@@ -125,26 +138,150 @@ class MainActivity : Activity() {
 
             addSpacer(8)
 
-            val selectButton = makeButton("Select folder") {
-                openFolderPicker()
-            }
-            addView(selectButton)
+            addView(
+                makeButton("Select folder") {
+                    openFolderPicker()
+                }
+            )
+        }
 
-            val backupButton = makeButton("Create verified backup") {
-                openArchiveCreator()
-            }.apply {
-                isEnabled = selectedTrees.isNotEmpty()
-                alpha = if (isEnabled) 1.0f else 0.45f
-            }
-            addView(backupButton)
+        addSpacer(12)
+
+        addCard {
+            addSectionTitle("PACKAGE PRESERVATION")
+            addBody(
+                "Choose whether to preserve installed package metadata and the " +
+                    "actual APK files. Package content means installable APKs, not " +
+                    "private application data."
+            )
+
+            addSpacer(8)
+
+            packageSummaryText = addBody(
+                packageSummary(),
+                primary = true
+            )
+
+            packageEstimateText = addBody(
+                packageEstimateSummary(),
+                primary = false
+            )
+
+            addSpacer(6)
+
+            addView(
+                Switch(this@MainActivity).apply {
+                    text = "Preserve installed packages"
+                    isChecked = includePackagePreservation
+                    setTextColor(primaryTextColor)
+                    setOnCheckedChangeListener { _, checked ->
+                        includePackagePreservation = checked
+                        render()
+                    }
+                }
+            )
+
+            addBody(
+                "Includes package/version/signature metadata and runtime permission state.",
+                primary = false
+            )
 
             addSpacer(4)
+
+            addView(
+                Switch(this@MainActivity).apply {
+                    text = "Preserve package content (APKs)"
+                    isChecked = includePackageContent
+                    isEnabled = includePackagePreservation
+                    setTextColor(primaryTextColor)
+                    setOnCheckedChangeListener { _, checked ->
+                        includePackageContent = checked
+                        render()
+                    }
+                }
+            )
+
+            addBody(
+                "Adds obtainable base and split APK files to the archive.",
+                primary = false
+            )
+
+            addSpacer(4)
+
+            addView(
+                Switch(this@MainActivity).apply {
+                    text = "Preserve only selected packages"
+                    isChecked = preserveOnlySelectedPackages
+                    isEnabled = includePackagePreservation &&
+                        packageInventory != null
+                    setTextColor(primaryTextColor)
+                    setOnCheckedChangeListener { _, checked ->
+                        preserveOnlySelectedPackages = checked
+                        render()
+                    }
+                }
+            )
+
+            addView(
+                makeSecondaryButton(
+                    if (packageInventory == null) {
+                        "Choose packages"
+                    } else {
+                        "Choose packages (" + selectedPackageNames.size + ")"
+                    }
+                ) {
+                    openPackageSelectionDialog()
+                }.apply {
+                    isEnabled = includePackagePreservation &&
+                        packageInventory != null
+                }
+            )
+
+            addSpacer(4)
+
+            addView(
+                makeSecondaryButton(
+                    if (packageScanInProgress) {
+                        "Scanning installed apps…"
+                    } else {
+                        "Rescan installed apps"
+                    }
+                ) {
+                    scanPackages()
+                }.apply {
+                    isEnabled = !packageScanInProgress
+                    alpha = if (isEnabled) 1.0f else 0.45f
+                }
+            )
+        }
+
+        addSpacer(12)
+
+        addCard {
+            addSectionTitle("BACKUP")
+            addBody(
+                backupConfigurationSummary(),
+                primary = true
+            )
+
+            addSpacer(8)
 
             statusText = addBody(
                 backupStatusSummary(),
                 primary = true
             )
             applyStatusColor(statusText, backupStatusColor())
+
+            addSpacer(4)
+
+            val backupButton = makeButton("Create verified backup") {
+                openArchiveCreator()
+            }.apply {
+                isEnabled = selectedTrees.isNotEmpty() ||
+                    includePackagePreservation
+                alpha = if (isEnabled) 1.0f else 0.45f
+            }
+            addView(backupButton)
         }
 
         addSpacer(12)
@@ -232,6 +369,255 @@ class MainActivity : Activity() {
                 addBody(capability.detail, primary = false)
             }
         }
+    }
+
+    private fun scanPackages() {
+        if (packageScanInProgress) return
+
+        packageScanInProgress = true
+        render()
+
+        executor.submit {
+            try {
+                val inventory = PackageInventoryCollector(packageManager)
+                    .collect()
+
+                runOnUiThread {
+                    packageInventory = inventory
+
+                    val currentNames = inventory.packages
+                        .mapTo(linkedSetOf()) { it.packageName }
+
+                    if (!packageSelectionInitialized) {
+                        selectedPackageNames = currentNames
+                        packageSelectionInitialized = true
+                    } else {
+                        selectedPackageNames.retainAll(currentNames)
+                    }
+
+                    packageScanInProgress = false
+                    render()
+                }
+            } catch (error: Exception) {
+                logger.warn(
+                    "Package inventory scan failed: " +
+                        (error.message ?: error.javaClass.simpleName)
+                )
+
+                runOnUiThread {
+                    packageInventory = null
+                    packageScanInProgress = false
+                    render()
+                    setStatus(
+                        "Package inventory failed: " +
+                            (error.message ?: error.javaClass.simpleName),
+                        errorColor
+                    )
+                }
+            }
+        }
+    }
+
+    private fun packageSummary(): String {
+        if (!includePackagePreservation) {
+            return "Package preservation disabled."
+        }
+
+        if (packageScanInProgress) {
+            return "Package inventory: scanning…"
+        }
+
+        val inventory = packageInventory
+            ?: return "Package inventory: not scanned yet."
+
+        val configured = configuredPackageInventory()
+        val scope = if (preserveOnlySelectedPackages) {
+            configured.packageCount.toString() + " selected"
+        } else {
+            inventory.packageCount.toString() + " visible"
+        }
+
+        val missing = if (configured.packagesWithoutReadableBaseApk > 0) {
+            " · " + configured.packagesWithoutReadableBaseApk +
+                " base APKs unavailable"
+        } else {
+            ""
+        }
+
+        return "Installed packages: " +
+            inventory.packageCount +
+            " visible · " +
+            scope +
+            missing
+    }
+
+    private fun packageEstimateSummary(): String {
+        if (!includePackagePreservation) {
+            return "Package content: not included."
+        }
+
+        val inventory = packageInventory
+            ?: return "Package content: not scanned yet."
+
+        val configured = configuredPackageInventory()
+
+        if (!includePackageContent) {
+            return "Package content: APK preservation disabled."
+        }
+
+        return "Package content: " +
+            formatBytes(configured.obtainableApkBytes) +
+            " obtainable · " +
+            configured.obtainableApkCount +
+            " APKs"
+    }
+
+    private fun configuredPackageInventory(): PackageInventory {
+        val inventory = packageInventory
+            ?: return PackageInventory(emptyList())
+
+        if (!preserveOnlySelectedPackages) {
+            return inventory
+        }
+
+        return PackageInventory(
+            inventory.packages.filter {
+                it.packageName in selectedPackageNames
+            }
+        )
+    }
+
+    private fun backupConfigurationSummary(): String {
+        val fileSummary = if (selectedTrees.isEmpty()) {
+            "Files: none selected"
+        } else {
+            "Files: " +
+                selectedTrees.size +
+                " folder(s) · " +
+                formatBytes(lastEstimate?.knownBytes ?: 0L)
+        }
+
+        val packageSummary = when {
+            !includePackagePreservation -> "Packages: disabled"
+            preserveOnlySelectedPackages -> {
+                "Packages: " + selectedPackageNames.size + " selected"
+            }
+            packageInventory != null -> {
+                "Packages: " + packageInventory!!.packageCount + " visible"
+            }
+            else -> "Packages: will be scanned during backup"
+        }
+
+        val apkSummary = when {
+            !includePackagePreservation || !includePackageContent ->
+                "APK content: disabled"
+            packageInventory != null ->
+                "APK content: " +
+                    formatBytes(configuredPackageInventory().obtainableApkBytes)
+            else ->
+                "APK content: enabled"
+        }
+
+        return fileSummary + " · " + packageSummary + " · " + apkSummary
+    }
+
+    private fun openPackageSelectionDialog() {
+        val inventory = packageInventory
+            ?: return
+
+        val packages = inventory.packages.sortedWith(
+            compareBy<InstalledPackage>(
+                { it.label.lowercase(Locale.US) },
+                { it.packageName }
+            )
+        )
+        val workingSelection = selectedPackageNames.toMutableSet()
+        val labels = packages.map {
+            it.label + "\n" + it.packageName
+        }.toTypedArray()
+        val checked = packages.map {
+            it.packageName in workingSelection
+        }.toBooleanArray()
+
+        lateinit var dialog: AlertDialog
+
+        fun setAllPackagesChecked(isChecked: Boolean) {
+            workingSelection.clear()
+            if (isChecked) {
+                workingSelection.addAll(packages.map { it.packageName })
+            }
+            packages.indices.forEach { index ->
+                dialog.listView.setItemChecked(index, isChecked)
+            }
+        }
+
+        val titleContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(16), dp(16), dp(4))
+
+            addView(
+                TextView(this@MainActivity).apply {
+                    text = "Select packages"
+                    textSize = 20f
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                }
+            )
+
+            addView(
+                LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.END
+
+                    addView(
+                        TextView(this@MainActivity).apply {
+                            text = "Select all"
+                            textSize = 14f
+                            gravity = Gravity.CENTER
+                            isClickable = true
+                            isFocusable = true
+                            setPadding(dp(12), dp(12), dp(12), dp(12))
+                            setOnClickListener {
+                                setAllPackagesChecked(true)
+                            }
+                        }
+                    )
+
+                    addView(
+                        TextView(this@MainActivity).apply {
+                            text = "Select none"
+                            textSize = 14f
+                            gravity = Gravity.CENTER
+                            isClickable = true
+                            isFocusable = true
+                            setPadding(dp(12), dp(12), dp(8), dp(12))
+                            setOnClickListener {
+                                setAllPackagesChecked(false)
+                            }
+                        }
+                    )
+                }
+            )
+        }
+
+        dialog = AlertDialog.Builder(this)
+            .setCustomTitle(titleContainer)
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                val packageName = packages[which].packageName
+                if (isChecked) {
+                    workingSelection += packageName
+                } else {
+                    workingSelection -= packageName
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Done") { _, _ ->
+                selectedPackageNames.clear()
+                selectedPackageNames.addAll(workingSelection)
+                render()
+            }
+            .create()
+
+        dialog.show()
     }
 
     private fun makeHeader(title: String, subtitle: String): View {
@@ -451,8 +837,11 @@ class MainActivity : Activity() {
     }
 
     private fun openArchiveCreator() {
-        if (selectedTrees.isEmpty()) {
-            setStatus("Select at least one folder first.", warningColor)
+        if (selectedTrees.isEmpty() && !includePackagePreservation) {
+            setStatus(
+                "Select a folder or enable installed-app preservation.",
+                warningColor
+            )
             return
         }
 
@@ -468,6 +857,13 @@ class MainActivity : Activity() {
 
     private fun startBackup(outputUri: Uri) {
         val roots = selectedTrees.toList()
+        val preservePackages = includePackagePreservation
+        val preservePackageApks = includePackageContent
+        val packageNames = if (preserveOnlySelectedPackages) {
+            selectedPackageNames.toSet()
+        } else {
+            null
+        }
         sessionStore.markRunning(outputUri.toString())
 
         render()
@@ -481,10 +877,17 @@ class MainActivity : Activity() {
                 val writer = ArchiveWriter(
                     resolver = contentResolver,
                     deviceInfo = device,
-                    capabilities = capabilities
+                    capabilities = capabilities,
+                    packageManager = packageManager
                 )
 
                 val progress = object : BackupProgressListener {
+                    override fun onPackageStarted(packageName: String) {
+                        runOnUiThread {
+                            statusText.text = "Preserving package " + packageName
+                        }
+                    }
+
                     override fun onFileStarted(path: String) {
                         runOnUiThread {
                             statusText.text = "Backing up " + path
@@ -504,7 +907,14 @@ class MainActivity : Activity() {
                     }
                 }
 
-                writer.write(outputUri, roots, progress)
+                writer.write(
+                    outputUri = outputUri,
+                    selectedTrees = roots,
+                    includePackages = preservePackages,
+                    includePackageApks = preservePackageApks,
+                    selectedPackageNames = packageNames,
+                    listener = progress
+                )
 
                 val verification = ArchiveVerifier(contentResolver)
                     .verify(outputUri)

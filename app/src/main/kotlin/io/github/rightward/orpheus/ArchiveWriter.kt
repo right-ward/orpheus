@@ -1,6 +1,7 @@
 package io.github.rightward.orpheus
 
 import android.content.ContentResolver
+import android.content.pm.PackageManager
 import android.net.Uri
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -14,6 +15,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 interface BackupProgressListener {
+    fun onPackageStarted(packageName: String) {}
     fun onFileStarted(path: String)
     fun onBytesProcessed(delta: Long, totalBytes: Long)
 }
@@ -21,21 +23,26 @@ interface BackupProgressListener {
 data class BackupWriteResult(
     val archiveId: String,
     val artifacts: List<ArchiveArtifact>,
-    val selectionErrors: List<String>
+    val selectionErrors: List<String>,
+    val packageCount: Int
 )
 
 class ArchiveWriter(
     private val resolver: ContentResolver,
     private val deviceInfo: DeviceInfo,
-    private val capabilities: CapabilitySnapshot
+    private val capabilities: CapabilitySnapshot,
+    private val packageManager: PackageManager
 ) {
     fun write(
         outputUri: Uri,
         selectedTrees: List<SelectedTree>,
+        includePackages: Boolean,
+        includePackageApks: Boolean,
+        selectedPackageNames: Set<String>?,
         listener: BackupProgressListener
     ): BackupWriteResult {
-        require(selectedTrees.isNotEmpty()) {
-            "At least one folder must be selected"
+        require(selectedTrees.isNotEmpty() || includePackages) {
+            "At least one preservation source must be selected"
         }
 
         val archiveId = UUID.randomUUID().toString()
@@ -43,6 +50,7 @@ class ArchiveWriter(
         val selectionErrors = ArrayList<String>()
         var artifactIndex = 0
         var processedBytes = 0L
+        var packageCount = 0
 
         val rawOutput = resolver.openOutputStream(outputUri)
             ?: throw IOException("Unable to open archive output")
@@ -143,6 +151,50 @@ class ArchiveWriter(
                     }
                 }
 
+                if (includePackages) {
+                    val inventory = try {
+                        PackageInventoryCollector(packageManager).collect()
+                    } catch (_: Exception) {
+                        selectionErrors +=
+                            "packages: PACKAGE_INVENTORY_FAILED"
+                        null
+                    }
+
+                    if (inventory != null) {
+                        val packageResult = PackageArchiveWriter().write(
+                            zip = zip,
+                            inventory = inventory,
+                            includeApkContent = includePackageApks,
+                            selectedPackageNames = selectedPackageNames,
+                            listener = object : BackupProgressListener {
+                                override fun onPackageStarted(
+                                    packageName: String
+                                ) {
+                                    listener.onPackageStarted(packageName)
+                                }
+
+                                override fun onFileStarted(path: String) {
+                                    listener.onFileStarted(path)
+                                }
+
+                                override fun onBytesProcessed(
+                                    delta: Long,
+                                    totalBytes: Long
+                                ) {
+                                    processedBytes += delta
+                                    listener.onBytesProcessed(
+                                        delta,
+                                        processedBytes
+                                    )
+                                }
+                            }
+                        )
+
+                        artifacts += packageResult.artifacts
+                        packageCount = packageResult.packageCount
+                    }
+                }
+
                 val manifest = ArchiveManifest(
                     archiveId = archiveId,
                     createdAt = nowUtc(),
@@ -185,7 +237,8 @@ class ArchiveWriter(
         return BackupWriteResult(
             archiveId = archiveId,
             artifacts = artifacts,
-            selectionErrors = selectionErrors
+            selectionErrors = selectionErrors,
+            packageCount = packageCount
         )
     }
 

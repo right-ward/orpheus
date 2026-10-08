@@ -7,4 +7,7 @@ object ArchivePaths {
     const val CHECKSUMS = "checksums/sha256.txt"
     const val COMPLETE_MARKER = "complete.marker"
     const val FILES_PREFIX = "files/"
+    const val PACKAGES_PREFIX = "packages/"
+    const val DATA_PREFIX = "data/"
+    const val EXPORTS_PREFIX = "exports/"
 }

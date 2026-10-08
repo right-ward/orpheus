@@ -189,12 +189,12 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4.0.1
+        uses: android-actions/setup-android@v4.0.2
 
       - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-37" "build-tools;36.0.0"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -235,10 +235,6 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Build signed APK
-        env:
-          ANDROID_ABI: ${{ matrix.abi }}
-          ANDROID_VERSION_NAME: ${{ needs.prepare.outputs.version }}
-          ANDROID_VERSION_CODE: ${{ needs.prepare.outputs.version_code }}
         shell: bash
         run: |
           set -euo pipefail

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="orpheus_bg">#171727</color>
+    <color name="orpheus_bg">#121212</color>
     <color name="orpheus_surface">#202035</color>
     <color name="orpheus_surface_strong">#262640</color>
     <color name="orpheus_accent">#AFA7FF</color>

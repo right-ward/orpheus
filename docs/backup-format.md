@@ -211,34 +211,38 @@ A restoration target is therefore a logical path plus domain-specific policy, no
 
 Package entries should describe an installed application independently from its APK bytes.
 
-Potential metadata:
+The current implementation stores package artifacts under:
 
-- package name
-- version code
-- version name
-- split names
-- install source where available
-- signature identity where available
-- requested/granted permissions where obtainable
-- APK artifact references
-- application-data artifact references
-- restoration constraints
-
-The format must support packages for which no APK was obtainable.
-
-Example:
-
-~~~json
-{
-  "package_name": "example.app",
-  "version_code": 123,
-  "status": "partial",
-  "apk": null,
-  "data": null
-}
+~~~text
+packages/<package-name>/metadata.json
+packages/<package-name>/base.apk
+packages/<package-name>/splits/<split-name>.apk
 ~~~
 
-This allows Orpheus to say "application was detected but cannot be reconstructed automatically" instead of silently omitting it.
+The versioned metadata schema records, where Android exposes the information:
+
+- package name and application label
+- version name and version code
+- minimum and target SDK
+- install/update timestamps
+- enabled/system/updated-system status
+- installer package when available
+- SHA-256 fingerprints of signing certificates
+- requested permissions and their current granted state
+- whether APK content preservation was enabled
+- references to preserved APK artifacts
+- restore constraints such as signature matching, user confirmation, and permission review
+
+The APK list is separate from package metadata so a package remains represented when no APK is obtainable.
+
+For the current Android-only collector:
+
+- ordinary user applications are candidates for base/split APK preservation
+- updated system applications are also candidates
+- unchanged system APKs are cataloged but not copied because the target system is expected to provide its own platform packages
+- inaccessible or missing APKs are represented as unavailable or failed artifacts rather than silently omitted
+
+Package payloads participate in the same manifest and SHA-256 verification rules as file payloads.
 
 ## Structured personal data
 
