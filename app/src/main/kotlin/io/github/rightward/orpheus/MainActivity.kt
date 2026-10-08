@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -538,8 +539,68 @@ class MainActivity : Activity() {
             it.packageName in workingSelection
         }.toBooleanArray()
 
-        AlertDialog.Builder(this)
-            .setTitle("Select packages")
+        lateinit var dialog: AlertDialog
+
+        fun setAllPackagesChecked(isChecked: Boolean) {
+            workingSelection.clear()
+            if (isChecked) {
+                workingSelection.addAll(packages.map { it.packageName })
+            }
+            packages.indices.forEach { index ->
+                dialog.listView.setItemChecked(index, isChecked)
+            }
+        }
+
+        val titleContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(16), dp(16), dp(4))
+
+            addView(
+                TextView(this@MainActivity).apply {
+                    text = "Select packages"
+                    textSize = 20f
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                }
+            )
+
+            addView(
+                LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.END
+
+                    addView(
+                        TextView(this@MainActivity).apply {
+                            text = "Select all"
+                            textSize = 14f
+                            gravity = Gravity.CENTER
+                            isClickable = true
+                            isFocusable = true
+                            setPadding(dp(12), dp(12), dp(12), dp(12))
+                            setOnClickListener {
+                                setAllPackagesChecked(true)
+                            }
+                        }
+                    )
+
+                    addView(
+                        TextView(this@MainActivity).apply {
+                            text = "Select none"
+                            textSize = 14f
+                            gravity = Gravity.CENTER
+                            isClickable = true
+                            isFocusable = true
+                            setPadding(dp(12), dp(12), dp(8), dp(12))
+                            setOnClickListener {
+                                setAllPackagesChecked(false)
+                            }
+                        }
+                    )
+                }
+            )
+        }
+
+        dialog = AlertDialog.Builder(this)
+            .setCustomTitle(titleContainer)
             .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
                 val packageName = packages[which].packageName
                 if (isChecked) {
@@ -554,7 +615,9 @@ class MainActivity : Activity() {
                 selectedPackageNames.addAll(workingSelection)
                 render()
             }
-            .show()
+            .create()
+
+        dialog.show()
     }
 
     private fun makeHeader(title: String, subtitle: String): View {
