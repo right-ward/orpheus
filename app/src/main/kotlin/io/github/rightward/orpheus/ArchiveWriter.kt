@@ -166,8 +166,7 @@ class ArchiveWriter(
                 val checksums = artifacts
                     .filter { it.sha256 != null }
                     .joinToString("\n") { it.sha256 + "  " + it.archivePath } +
-                    "
-"
+                    "\n"
 
                 writeEntry(zip, ArchivePaths.CHECKSUMS, checksums)
                 writeEntry(

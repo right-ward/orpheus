@@ -20,15 +20,6 @@ android {
         }
     }
 
-    sourceSets {
-        getByName("main") {
-            kotlin.srcDir("src/main/kotlin")
-        }
-        getByName("test") {
-            kotlin.srcDir("src/test/kotlin")
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
