@@ -27,11 +27,16 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             if (hasCiSigning) {
                 signingConfig = signingConfigs.getByName("ciRelease")
             }
         }
+        debug {
+            isMinifyEnabled = false
+            if (hasCiSigning) {
+                signingConfig = signingConfigs.getByName("ciDebug")
+            }
     }
 
     compileOptions {
