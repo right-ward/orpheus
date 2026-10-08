@@ -43,15 +43,15 @@ Orpheus
 
 Goal: reliably preserve user-accessible files.
 
-- [ ] User-selected directories
-- [ ] Media/file enumeration
-- [ ] Large-file streaming
-- [ ] Checksums
-- [ ] Archive writer
-- [ ] Manifest generation
-- [ ] Archive integrity verification
-- [ ] Interrupted-backup recovery
-- [ ] Storage estimation
+- [x] User-selected directories
+- [x] Media/file enumeration
+- [x] Large-file streaming
+- [x] Checksums
+- [x] Archive writer
+- [x] Manifest generation
+- [x] Archive integrity verification
+- [x] Interrupted-backup recovery
+- [x] Storage estimation
 
 Exit condition:
 
