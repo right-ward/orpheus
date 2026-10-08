@@ -37,6 +37,7 @@ android {
             if (hasCiSigning) {
                 signingConfig = signingConfigs.getByName("ciDebug")
             }
+        }
     }
 
     compileOptions {
