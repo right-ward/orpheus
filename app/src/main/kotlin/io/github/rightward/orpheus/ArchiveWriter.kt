@@ -213,10 +213,8 @@ class ArchiveWriter(
 
                 val checksums = artifacts
                     .filter { it.sha256 != null }
-                    .joinToString("
-") { it.sha256 + "  " + it.archivePath } +
-                    "
-"
+                    .joinToString("\n") { it.sha256 + "  " + it.archivePath } +
+                    "\n"
 
                 writeEntry(zip, ArchivePaths.CHECKSUMS, checksums)
                 writeEntry(
@@ -227,8 +225,7 @@ class ArchiveWriter(
                 writeEntry(
                     zip,
                     ArchivePaths.COMPLETE_MARKER,
-                    "writer_complete=true
-"
+                    "writer_complete=true\n"
                 )
             }
         }
