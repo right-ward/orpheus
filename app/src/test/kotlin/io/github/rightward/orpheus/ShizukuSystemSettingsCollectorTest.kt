@@ -58,6 +58,22 @@ class ShizukuSystemSettingsCollectorTest {
     }
 
     @Test
+    fun rejectsNonScalarAllowListedValues() {
+        val error = runCatching {
+            ShizukuSystemSettingsCollector.normalize(
+                rawReport(
+                    statuses = mapOf("system.font_scale" to "available"),
+                    values = mapOf("system.font_scale" to "1.0\\npassword=secret")
+                ),
+                expectedUid = 2000,
+                collectedAtUtc = "2026-10-09T00:00:00Z"
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+    }
+
+    @Test
     fun rejectsAnOversizedAllowListedValue() {
         val error = runCatching {
             ShizukuSystemSettingsCollector.normalize(
