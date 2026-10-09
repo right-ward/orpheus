@@ -80,10 +80,12 @@ class ShizukuProbeService @Keep constructor() : IShizukuProbeService.Stub() {
         )
         val allowlist = allowedKeys.toHashSet()
         val values = LinkedHashMap<String, String>()
+        var parseableEntries = 0
 
         output.lineSequence().forEach { line ->
             val separator = line.indexOf('=')
             if (separator <= 0) return@forEach
+            parseableEntries++
 
             val key = line.substring(0, separator).trim()
             if (key in allowlist) {
@@ -91,7 +93,7 @@ class ShizukuProbeService @Keep constructor() : IShizukuProbeService.Stub() {
             }
         }
 
-        if (values.isEmpty()) {
+        if (parseableEntries == 0) {
             throw IOException("Settings namespace returned no parseable values.")
         }
         return values
