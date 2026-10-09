@@ -21,8 +21,8 @@ android {
         applicationId = "io.github.rightward.orpheus"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.1"
+        versionCode = 7
+        versionName = "0.5.1"
     }
 
     signingConfigs {
@@ -57,6 +57,10 @@ android {
         }
     }
 
+    buildFeatures {
+        aidl = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -66,4 +70,7 @@ android {
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20260814")
+    implementation("androidx.annotation:annotation:1.11.0")
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

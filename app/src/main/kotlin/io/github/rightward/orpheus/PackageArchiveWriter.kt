@@ -5,13 +5,20 @@ import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.InputStream
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+fun interface PackageApkSourceReader {
+    fun open(path: String): InputStream
+}
+
 data class PackageBackupResult(
     val packageCount: Int,
-    val artifacts: List<ArchiveArtifact>
+    val artifacts: List<ArchiveArtifact>,
+    val shizukuApkFallbackAttempts: Int = 0,
+    val shizukuApkFallbackSuccesses: Int = 0
 ) {
     val failedApkCount: Int
         get() = artifacts.count {
@@ -25,9 +32,12 @@ class PackageArchiveWriter {
         inventory: PackageInventory,
         includeApkContent: Boolean,
         selectedPackageNames: Set<String>?,
-        listener: BackupProgressListener
+        listener: BackupProgressListener,
+        shizukuApkReader: PackageApkSourceReader? = null
     ): PackageBackupResult {
         val artifacts = ArrayList<ArchiveArtifact>()
+        var fallbackAttempts = 0
+        var fallbackSuccesses = 0
         val packages = if (selectedPackageNames == null) {
             inventory.packages
         } else {
@@ -45,18 +55,22 @@ class PackageArchiveWriter {
             val packageApkArtifacts = ArrayList<ArchiveArtifact>()
 
             if (includeApkContent && packageInfo.shouldPreserveApks) {
-                packageApkArtifacts += writeApk(
+                val baseResult = writeApk(
                     zip = zip,
                     packageIndex = packageIndex + 1,
                     packageName = packageInfo.packageName,
                     source = packageInfo.baseApk,
                     archivePath = packageRoot + "/base.apk",
                     artifactSuffix = "base",
-                    listener = listener
+                    listener = listener,
+                    shizukuApkReader = shizukuApkReader
                 )
+                packageApkArtifacts += baseResult.artifact
+                if (baseResult.shizukuFallbackAttempted) fallbackAttempts++
+                if (baseResult.shizukuFallbackSucceeded) fallbackSuccesses++
 
                 packageInfo.splitApks.forEachIndexed { splitIndex, source ->
-                    packageApkArtifacts += writeApk(
+                    val splitResult = writeApk(
                         zip = zip,
                         packageIndex = packageIndex + 1,
                         packageName = packageInfo.packageName,
@@ -65,20 +79,18 @@ class PackageArchiveWriter {
                             "/splits/" +
                             ArchivePath.sanitizeComponent(source.name) +
                             ".apk",
-                        artifactSuffix = "split-%03d".format(
-                            Locale.US,
-                            splitIndex + 1
-                        ),
-                        listener = listener
+                        artifactSuffix = "split-%03d".format(Locale.US, splitIndex + 1),
+                        listener = listener,
+                        shizukuApkReader = shizukuApkReader
                     )
+                    packageApkArtifacts += splitResult.artifact
+                    if (splitResult.shizukuFallbackAttempted) fallbackAttempts++
+                    if (splitResult.shizukuFallbackSucceeded) fallbackSuccesses++
                 }
             }
 
             val metadataArtifactId =
-                "package-%03d-metadata".format(
-                    Locale.US,
-                    packageIndex + 1
-                )
+                "package-%03d-metadata".format(Locale.US, packageIndex + 1)
             val metadataPath = packageRoot + "/metadata.json"
             val metadata = PackageMetadataCodec.encode(
                 packageInfo = packageInfo,
@@ -102,13 +114,14 @@ class PackageArchiveWriter {
                 sha256 = metadataDigest,
                 modifiedAtEpochMs = packageInfo.lastUpdateTime
             )
-
             artifacts += packageApkArtifacts
         }
 
         return PackageBackupResult(
             packageCount = packages.size,
-            artifacts = artifacts
+            artifacts = artifacts,
+            shizukuApkFallbackAttempts = fallbackAttempts,
+            shizukuApkFallbackSuccesses = fallbackSuccesses
         )
     }
 
@@ -119,60 +132,62 @@ class PackageArchiveWriter {
         source: PackageApkSource,
         archivePath: String,
         artifactSuffix: String,
-        listener: BackupProgressListener
-    ): ArchiveArtifact {
-        val artifactId = "package-%03d-%s-apk".format(
-            Locale.US,
-            packageIndex,
-            artifactSuffix
-        )
+        listener: BackupProgressListener,
+        shizukuApkReader: PackageApkSourceReader?
+    ): ApkWriteOutcome {
+        val artifactId = "package-%03d-%s-apk".format(Locale.US, packageIndex, artifactSuffix)
         val sourceId = "package:" + packageName + "#" + source.name
-
-        if (source.path == null) {
-            return ArchiveArtifact(
-                id = artifactId,
-                kind = "apk",
-                archivePath = archivePath,
-                source = sourceId,
-                status = ArtifactStatus.UNAVAILABLE,
-                sizeBytes = 0L,
-                sha256 = null,
-                modifiedAtEpochMs = null,
-                errorCode = "APK_SOURCE_UNAVAILABLE"
+        val sourcePath = source.path ?: return ApkWriteOutcome(
+            artifact = apkArtifact(
+                artifactId, archivePath, sourceId, ArtifactStatus.UNAVAILABLE,
+                0L, null, null, "APK_SOURCE_UNAVAILABLE"
             )
+        )
+
+        val file = File(sourcePath)
+        val localInput = if (file.isFile) {
+            runCatching { BufferedInputStream(FileInputStream(file), APK_BUFFER_SIZE) }
+                .getOrNull()
+        } else {
+            null
         }
 
-        val file = File(source.path)
-        if (!file.isFile) {
-            return ArchiveArtifact(
-                id = artifactId,
-                kind = "apk",
-                archivePath = archivePath,
-                source = sourceId,
-                status = ArtifactStatus.UNAVAILABLE,
-                sizeBytes = 0L,
-                sha256 = null,
-                modifiedAtEpochMs = file.lastModified().takeIf { it > 0L },
-                errorCode = "APK_FILE_MISSING"
-            )
+        val fallbackEligible = shizukuApkReader != null &&
+            ShizukuPackageApkReader.supportsPath(sourcePath)
+        val fallbackAttempted = localInput == null && fallbackEligible
+        val fallbackInput = if (fallbackAttempted) {
+            runCatching {
+                BufferedInputStream(shizukuApkReader!!.open(sourcePath), APK_BUFFER_SIZE)
+            }.getOrNull()
+        } else {
+            null
         }
+        val usedShizukuFallback = fallbackInput != null
+        val input = localInput ?: fallbackInput
 
-        val input = try {
-            BufferedInputStream(
-                FileInputStream(file),
-                64 * 1024
-            )
-        } catch (_: Exception) {
-            return ArchiveArtifact(
-                id = artifactId,
-                kind = "apk",
-                archivePath = archivePath,
-                source = sourceId,
-                status = ArtifactStatus.FAILED,
-                sizeBytes = 0L,
-                sha256 = null,
-                modifiedAtEpochMs = file.lastModified().takeIf { it > 0L },
-                errorCode = "APK_OPEN_FAILED"
+        if (input == null) {
+            val status = when {
+                fallbackAttempted -> ArtifactStatus.FAILED
+                file.isFile -> ArtifactStatus.REQUIRES_PRIVILEGE
+                else -> ArtifactStatus.UNAVAILABLE
+            }
+            val errorCode = when {
+                fallbackAttempted -> "SHIZUKU_APK_READ_FAILED"
+                file.isFile -> "APK_READ_REQUIRES_PRIVILEGE"
+                else -> "APK_FILE_MISSING"
+            }
+            return ApkWriteOutcome(
+                artifact = apkArtifact(
+                    artifactId,
+                    archivePath,
+                    if (fallbackAttempted) "shizuku:" + sourceId else sourceId,
+                    status,
+                    0L,
+                    null,
+                    file.lastModified().takeIf { it > 0L },
+                    errorCode
+                ),
+                shizukuFallbackAttempted = fallbackAttempted
             )
         }
 
@@ -185,39 +200,72 @@ class PackageArchiveWriter {
                 stream.copyToWithDigest(
                     output = zip,
                     digest = digest,
-                    onBytes = { delta ->
-                        listener.onBytesProcessed(delta, delta)
-                    }
+                    onBytes = { delta -> listener.onBytesProcessed(delta, delta) }
                 )
             }
-
             zip.closeEntry()
-
-            ArchiveArtifact(
-                id = artifactId,
-                kind = "apk",
-                archivePath = archivePath,
-                source = sourceId,
-                status = ArtifactStatus.RESTORABLE,
-                sizeBytes = bytes,
-                sha256 = Sha256.finish(digest),
-                modifiedAtEpochMs = file.lastModified().takeIf { it > 0L }
+            ApkWriteOutcome(
+                artifact = apkArtifact(
+                    artifactId,
+                    archivePath,
+                    if (usedShizukuFallback) "shizuku:" + sourceId else sourceId,
+                    ArtifactStatus.RESTORABLE,
+                    bytes,
+                    Sha256.finish(digest),
+                    file.lastModified().takeIf { it > 0L },
+                    null
+                ),
+                shizukuFallbackAttempted = fallbackAttempted,
+                shizukuFallbackSucceeded = usedShizukuFallback
             )
         } catch (_: Exception) {
+            runCatching { input.close() }
             runCatching { zip.closeEntry() }
-
-            ArchiveArtifact(
-                id = artifactId,
-                kind = "apk",
-                archivePath = archivePath,
-                source = sourceId,
-                status = ArtifactStatus.FAILED,
-                sizeBytes = 0L,
-                sha256 = null,
-                modifiedAtEpochMs = file.lastModified().takeIf { it > 0L },
-                errorCode = "APK_READ_FAILED"
+            ApkWriteOutcome(
+                artifact = apkArtifact(
+                    artifactId,
+                    archivePath,
+                    if (usedShizukuFallback) "shizuku:" + sourceId else sourceId,
+                    ArtifactStatus.FAILED,
+                    0L,
+                    null,
+                    file.lastModified().takeIf { it > 0L },
+                    "APK_READ_FAILED"
+                ),
+                shizukuFallbackAttempted = fallbackAttempted
             )
         }
+    }
+
+    private fun apkArtifact(
+        id: String,
+        archivePath: String,
+        source: String,
+        status: ArtifactStatus,
+        sizeBytes: Long,
+        sha256: String?,
+        modifiedAtEpochMs: Long?,
+        errorCode: String?
+    ) = ArchiveArtifact(
+        id = id,
+        kind = "apk",
+        archivePath = archivePath,
+        source = source,
+        status = status,
+        sizeBytes = sizeBytes,
+        sha256 = sha256,
+        modifiedAtEpochMs = modifiedAtEpochMs,
+        errorCode = errorCode
+    )
+
+    private data class ApkWriteOutcome(
+        val artifact: ArchiveArtifact,
+        val shizukuFallbackAttempted: Boolean = false,
+        val shizukuFallbackSucceeded: Boolean = false
+    )
+
+    private companion object {
+        const val APK_BUFFER_SIZE = 64 * 1024
     }
 }
 

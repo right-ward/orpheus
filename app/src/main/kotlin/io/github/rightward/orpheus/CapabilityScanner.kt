@@ -1,8 +1,11 @@
 package io.github.rightward.orpheus
 
-class CapabilityScanner {
+class CapabilityScanner(
+    private val shizukuStatus: ShizukuBackendStatus = ShizukuBackendStatus()
+) {
     fun scan(): CapabilitySnapshot {
         val normal = CapabilityProvider.NORMAL_ANDROID
+        val shizuku = CapabilityProvider.SHIZUKU
 
         return CapabilitySnapshot(
             capabilities = listOf(
@@ -33,20 +36,38 @@ class CapabilityScanner {
                 Capability(
                     id = CapabilityId.PACKAGE_INVENTORY,
                     provider = normal,
-                    availability = CapabilityAvailability.NOT_IMPLEMENTED,
-                    detail = "Package inventory is deferred to the package-preservation phase."
+                    availability = CapabilityAvailability.AVAILABLE,
+                    detail = "Installed packages and exposed package metadata are inventoried through PackageManager."
+                ),
+                Capability(
+                    id = CapabilityId.PACKAGE_APK_PRESERVATION,
+                    provider = normal,
+                    availability = CapabilityAvailability.LIMITED,
+                    detail = "APK preservation targets base and split APKs; inaccessible paths may use the separately capability-gated Shizuku fallback under /data/app/."
                 ),
                 Capability(
                     id = CapabilityId.SHIZUKU_BACKEND,
-                    provider = CapabilityProvider.SHIZUKU,
-                    availability = CapabilityAvailability.NOT_IMPLEMENTED,
-                    detail = "Shizuku detection and integration are planned for a later phase."
+                    provider = shizuku,
+                    availability = shizukuStatus.backendAvailability(),
+                    detail = shizukuStatus.backendDetail()
+                ),
+                Capability(
+                    id = CapabilityId.SHIZUKU_READ_ONLY_DIAGNOSTICS,
+                    provider = shizuku,
+                    availability = shizukuStatus.diagnosticsAvailability(),
+                    detail = shizukuStatus.diagnosticsDetail()
+                ),
+                Capability(
+                    id = CapabilityId.SHIZUKU_PACKAGE_APK_FALLBACK,
+                    provider = shizuku,
+                    availability = shizukuStatus.apkFallbackAvailability(),
+                    detail = shizukuStatus.apkFallbackDetail()
                 ),
                 Capability(
                     id = CapabilityId.ROOT_BACKEND,
                     provider = CapabilityProvider.ROOT,
                     availability = CapabilityAvailability.NOT_IMPLEMENTED,
-                    detail = "Root is a future capability backend."
+                    detail = "A separate root capability backend is not implemented. A Shizuku service may itself run as root, but this is recorded under the Shizuku provider."
                 )
             )
         )

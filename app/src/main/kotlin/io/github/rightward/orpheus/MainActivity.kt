@@ -1,12 +1,16 @@
 package io.github.rightward.orpheus
 
 import android.app.Activity
-import android.content.Intent
 import android.app.AlertDialog
+import android.content.ComponentName
+import android.content.Intent
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.IBinder
 import android.provider.DocumentsContract
 import android.view.Gravity
 import android.view.View
@@ -20,6 +24,8 @@ import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
+import org.json.JSONObject
+import rikka.shizuku.Shizuku
 
 class MainActivity : Activity() {
     private val logger = AndroidLogger()
@@ -42,6 +48,106 @@ class MainActivity : Activity() {
     private var preserveOnlySelectedPackages = false
     private var selectedPackageNames = linkedSetOf<String>()
     private var packageSelectionInitialized = false
+
+    private var shizukuBackendStatus = ShizukuBackendStatus()
+    private var shizukuPermissionRequestPending = false
+    private var shizukuProbeInProgress = false
+    private var shizukuServiceBound = false
+    private var shizukuProbeService: IShizukuProbeService? = null
+    private lateinit var shizukuStatusText: TextView
+    private lateinit var shizukuDetailsText: TextView
+
+    private val shizukuUserServiceArgs by lazy {
+        Shizuku.UserServiceArgs(
+            ComponentName(this, ShizukuProbeService::class.java)
+        )
+            .processNameSuffix("orpheus_probe")
+            .tag("io.github.rightward.orpheus.read_only_probe")
+            .version(2)
+            .daemon(false)
+    }
+
+    private val shizukuBinderReceivedListener =
+        Shizuku.OnBinderReceivedListener {
+            runOnUiThread {
+                refreshShizukuState()
+                render()
+            }
+        }
+
+    private val shizukuBinderDeadListener =
+        Shizuku.OnBinderDeadListener {
+            runOnUiThread {
+                shizukuBackendStatus = ShizukuBackendStatus()
+                shizukuPermissionRequestPending = false
+                shizukuProbeInProgress = false
+                shizukuServiceBound = false
+                shizukuProbeService = null
+                render()
+            }
+        }
+
+    private val shizukuPermissionResultListener =
+        Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode != REQUEST_SHIZUKU_PERMISSION) return@OnRequestPermissionResultListener
+            shizukuPermissionRequestPending = false
+            refreshShizukuState()
+            render()
+            setStatus(
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    "Shizuku permission granted. Run the read-only probe to verify the backend."
+                } else {
+                    "Shizuku permission was not granted. Privileged operations remain disabled."
+                },
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    successColor
+                } else {
+                    warningColor
+                }
+            )
+        }
+
+    private val shizukuServiceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val remote = service?.let { IShizukuProbeService.Stub.asInterface(it) }
+            if (remote == null) {
+                runOnUiThread {
+                    completeShizukuProbe(
+                        rawResult = null,
+                        failure = IllegalStateException("Shizuku probe service returned no binder.")
+                    )
+                }
+                return
+            }
+
+            shizukuProbeService = remote
+            runShizukuProbe(remote)
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            shizukuProbeService = null
+            runOnUiThread {
+                if (isDestroyed) {
+                    stopShizukuProbeService()
+                    return@runOnUiThread
+                }
+                if (shizukuProbeInProgress) {
+                    completeShizukuProbe(
+                        rawResult = null,
+                        failure = IllegalStateException("Shizuku probe service disconnected.")
+                    )
+                } else {
+                    stopShizukuProbeService()
+                    shizukuBackendStatus = shizukuBackendStatus.copy(
+                        probeOutcome = ShizukuProbeOutcome.FAILED,
+                        probeSummary = null,
+                        probeFailure = "The Shizuku UserService disconnected."
+                    )
+                    render()
+                }
+            }
+        }
+    }
 
     private val backgroundColor by lazy { getColor(R.color.orpheus_bg) }
     private val surfaceColor by lazy { getColor(R.color.orpheus_surface) }
@@ -80,11 +186,28 @@ class MainActivity : Activity() {
             }
         )
 
+        Shizuku.addBinderReceivedListener(shizukuBinderReceivedListener)
+        Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionResultListener)
+        refreshShizukuState()
+
         render()
         scanPackages()
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshShizukuState()
+        render()
+    }
+
     override fun onDestroy() {
+        Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+        Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionResultListener)
+        shizukuPermissionRequestPending = false
+        shizukuProbeInProgress = false
+        stopShizukuProbeService()
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -110,7 +233,7 @@ class MainActivity : Activity() {
         root.addView(
             makeHeader(
                 title = "Orpheus",
-                subtitle = "Android preservation · Phase 3"
+                subtitle = "Android preservation · Phase 4"
             )
         )
 
@@ -202,7 +325,7 @@ class MainActivity : Activity() {
             )
 
             addBody(
-                "Adds obtainable base and split APK files to the archive.",
+                "Adds obtainable base and split APK files to the archive. If normal app access fails after the Shizuku probe succeeds, Orpheus may use a read-only fallback for PackageManager-reported APK paths under /data/app.",
                 primary = false
             )
 
@@ -349,8 +472,45 @@ class MainActivity : Activity() {
         addSpacer(12)
 
         addCard {
+            addSectionTitle("SHIZUKU BACKEND")
+            shizukuStatusText = addBody(
+                shizukuBackendStatus.summary(
+                    permissionRequestPending = shizukuPermissionRequestPending,
+                    probeInProgress = shizukuProbeInProgress
+                ),
+                primary = true
+            )
+            applyStatusColor(shizukuStatusText, shizukuStatusColor())
+
+            shizukuDetailsText = addBody(
+                shizukuDetailsSummary(),
+                primary = false
+            )
+
+            addSpacer(6)
+
+            addView(
+                makeButton(shizukuActionLabel()) {
+                    onShizukuActionClicked()
+                }.apply {
+                    isEnabled = !shizukuPermissionRequestPending &&
+                        !shizukuProbeInProgress
+                    alpha = if (isEnabled) 1.0f else 0.45f
+                }
+            )
+
+            addView(
+                makeSecondaryButton("Setup instructions") {
+                    showShizukuSetupHelp()
+                }
+            )
+        }
+
+        addSpacer(12)
+
+        addCard {
             addSectionTitle("CAPABILITIES")
-            CapabilityScanner().scan().capabilities.forEach { capability ->
+            CapabilityScanner(shizukuBackendStatus).scan().capabilities.forEach { capability ->
                 val line = addBody(
                     capability.id.displayName +
                         " · " +
@@ -367,6 +527,325 @@ class MainActivity : Activity() {
                     }
                 )
                 addBody(capability.detail, primary = false)
+            }
+        }
+    }
+
+    private fun refreshShizukuState() {
+        val previous = shizukuBackendStatus
+        val binderConnected = runCatching {
+            Shizuku.pingBinder()
+        }.getOrDefault(false)
+
+        if (!binderConnected) {
+            shizukuBackendStatus = ShizukuBackendStatus()
+            shizukuPermissionRequestPending = false
+            shizukuProbeInProgress = false
+            shizukuServiceBound = false
+            shizukuProbeService = null
+            return
+        }
+
+        val serverApiSupported = runCatching {
+            !Shizuku.isPreV11()
+        }.getOrDefault(false)
+        val permissionGranted = serverApiSupported && runCatching {
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        }.getOrDefault(false)
+        val serverUid = runCatching {
+            Shizuku.getUid().takeIf { it >= 0 }
+        }.getOrNull()
+
+        val preserveProbe = previous.binderConnected &&
+            previous.serverApiSupported == serverApiSupported &&
+            previous.permissionGranted &&
+            permissionGranted &&
+            previous.serverUid == serverUid &&
+            previous.probeOutcome != ShizukuProbeOutcome.NOT_RUN
+
+        shizukuBackendStatus = ShizukuBackendStatus(
+            binderConnected = true,
+            serverApiSupported = serverApiSupported,
+            permissionGranted = permissionGranted,
+            serverUid = serverUid,
+            probeOutcome = if (preserveProbe) {
+                previous.probeOutcome
+            } else {
+                ShizukuProbeOutcome.NOT_RUN
+            },
+            probeSummary = if (preserveProbe) previous.probeSummary else null,
+            probeFailure = if (preserveProbe) previous.probeFailure else null,
+            apkFallbackOutcome = if (preserveProbe) {
+                previous.apkFallbackOutcome
+            } else {
+                ShizukuApkFallbackOutcome.NOT_RUN
+            },
+            apkFallbackSummary = if (preserveProbe) previous.apkFallbackSummary else null,
+            apkFallbackFailure = if (preserveProbe) previous.apkFallbackFailure else null
+        )
+    }
+
+    private fun shizukuStatusColor(): Int = when (
+        shizukuBackendStatus.backendAvailability()
+    ) {
+        CapabilityAvailability.AVAILABLE -> successColor
+        CapabilityAvailability.LIMITED -> warningColor
+        CapabilityAvailability.UNAVAILABLE -> errorColor
+        CapabilityAvailability.NOT_IMPLEMENTED,
+        CapabilityAvailability.NOT_TESTED -> mutedTextColor
+    }
+
+    private fun shizukuDetailsSummary(): String {
+        val uidDetail = shizukuBackendStatus.serverUid?.let {
+            "Server UID: " + it + " (" +
+                ShizukuPrivilegeClassifier.classify(it).displayName + ")."
+        } ?: "Server UID: not available."
+
+        val pendingDetail = if (shizukuPermissionRequestPending) {
+            "Approve or deny the request in the Shizuku permission dialog."
+        } else {
+            null
+        }
+
+        return listOfNotNull(
+            shizukuBackendStatus.backendDetail(),
+            uidDetail,
+            pendingDetail,
+            shizukuBackendStatus.diagnosticsDetail(),
+            shizukuBackendStatus.apkFallbackDetail()
+        ).joinToString("\n")
+    }
+
+    private fun shizukuActionLabel(): String = when {
+        !shizukuBackendStatus.binderConnected -> "Refresh Shizuku status"
+        !shizukuBackendStatus.serverApiSupported -> "Shizuku API unsupported"
+        !shizukuBackendStatus.permissionGranted -> "Grant Shizuku access"
+        shizukuBackendStatus.privilege == ShizukuPrivilege.UNKNOWN ->
+            "Privilege level unknown"
+        else -> "Run read-only probe"
+    }
+
+    private fun onShizukuActionClicked() {
+        refreshShizukuState()
+        when {
+            !shizukuBackendStatus.binderConnected -> {
+                render()
+                setStatus(
+                    "Shizuku/Sui is not connected. Start it, then return and refresh status.",
+                    warningColor
+                )
+            }
+            !shizukuBackendStatus.serverApiSupported -> {
+                render()
+                setStatus(
+                    "This Shizuku server is too old for UserService operations; v11 or later is required.",
+                    errorColor
+                )
+            }
+            !shizukuBackendStatus.permissionGranted -> requestShizukuPermission()
+            else -> startShizukuProbe()
+        }
+    }
+
+    private fun requestShizukuPermission() {
+        if (shizukuPermissionRequestPending) return
+
+        try {
+            shizukuPermissionRequestPending = true
+            render()
+            Shizuku.requestPermission(REQUEST_SHIZUKU_PERMISSION)
+        } catch (error: Exception) {
+            shizukuPermissionRequestPending = false
+            refreshShizukuState()
+            render()
+            setStatus(
+                "Could not request Shizuku permission: " +
+                    (error.message ?: error.javaClass.simpleName),
+                errorColor
+            )
+        }
+    }
+
+    private fun showShizukuSetupHelp() {
+        AlertDialog.Builder(this)
+            .setTitle("Set up Shizuku")
+            .setMessage(
+                "Install Shizuku or configure Sui separately, start the service, " +
+                    "then return to Orpheus. On non-rooted Android 11 and later, " +
+                    "Shizuku can be started with Wireless debugging. Orpheus will " +
+                    "request its own authorization before running the read-only probe. " +
+                    "Shizuku access is not the same as root access."
+            )
+            .setNegativeButton("Close", null)
+            .setPositiveButton("Open setup guide") { _, _ ->
+                runCatching {
+                    startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(SHIZUKU_SETUP_URL)
+                        )
+                    )
+                }.onFailure {
+                    setStatus("Could not open the Shizuku setup guide.", warningColor)
+                }
+            }
+            .show()
+    }
+
+    private fun startShizukuProbe() {
+        refreshShizukuState()
+        if (!shizukuBackendStatus.binderConnected ||
+            !shizukuBackendStatus.serverApiSupported ||
+            !shizukuBackendStatus.permissionGranted
+        ) {
+            render()
+            return
+        }
+
+        if (shizukuBackendStatus.privilege == ShizukuPrivilege.UNKNOWN) {
+            render()
+            setStatus(
+                "Shizuku's privilege level is unknown. Orpheus will not start the probe until UID 0 (root) or UID 2000 (shell/ADB) is reported.",
+                warningColor
+            )
+            return
+        }
+
+        shizukuProbeInProgress = true
+        shizukuBackendStatus = shizukuBackendStatus.copy(
+            probeOutcome = ShizukuProbeOutcome.NOT_RUN,
+            probeSummary = null,
+            probeFailure = null
+        )
+        render()
+
+        val existingService = shizukuProbeService
+        if (shizukuServiceBound && existingService != null) {
+            runShizukuProbe(existingService)
+            return
+        }
+
+        try {
+            shizukuServiceBound = true
+            Shizuku.bindUserService(
+                shizukuUserServiceArgs,
+                shizukuServiceConnection
+            )
+        } catch (error: Exception) {
+            shizukuServiceBound = false
+            completeShizukuProbe(
+                rawResult = null,
+                failure = error
+            )
+        }
+    }
+
+    private fun runShizukuProbe(remote: IShizukuProbeService) {
+        executor.submit {
+            val result = runCatching { remote.collectReadOnlyDiagnostics() }
+            runOnUiThread {
+                if (!isDestroyed) {
+                    completeShizukuProbe(
+                        rawResult = result.getOrNull(),
+                        failure = result.exceptionOrNull()
+                    )
+                }
+            }
+        }
+    }
+
+    private fun completeShizukuProbe(
+        rawResult: String?,
+        failure: Throwable?
+    ) {
+        if (!shizukuProbeInProgress || isDestroyed) return
+        shizukuProbeInProgress = false
+
+        if (!runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
+            shizukuBackendStatus = ShizukuBackendStatus()
+            stopShizukuProbeService()
+            render()
+            return
+        }
+
+        val outcome = runCatching {
+            if (failure != null) throw failure
+            val raw = rawResult
+                ?: throw IllegalStateException("The probe returned no result.")
+            val report = JSONObject(raw)
+            val userServiceUid = report.getInt("uid")
+            val expectedUid = shizukuBackendStatus.serverUid
+                ?: throw IllegalStateException("Shizuku did not report its server UID.")
+
+            if (userServiceUid != expectedUid) {
+                throw SecurityException(
+                    "UserService UID " + userServiceUid +
+                        " did not match Shizuku server UID " + expectedUid + "."
+                )
+            }
+
+            val classifiedPrivilege = ShizukuPrivilegeClassifier.classify(userServiceUid)
+            if (classifiedPrivilege == ShizukuPrivilege.UNKNOWN) {
+                throw SecurityException(
+                    "Unexpected Shizuku UserService UID: " + userServiceUid + "."
+                )
+            }
+            val privilege = classifiedPrivilege.displayName
+            val release = report.optString("android_release", "unknown")
+            val apiLevel = report.optInt("android_sdk", -1)
+            val identity = report.getString("identity")
+            val processId = report.getInt("pid")
+
+            "UserService UID: " + userServiceUid + " (" + privilege + ")" +
+                "\nProcess ID: " + processId +
+                "\nIdentity: " + identity +
+                "\nAndroid: " + release + " (API " + apiLevel + ")"
+        }
+
+        if (outcome.isSuccess) {
+            shizukuBackendStatus = shizukuBackendStatus.copy(
+                probeOutcome = ShizukuProbeOutcome.SUCCEEDED,
+                probeSummary = outcome.getOrThrow(),
+                probeFailure = null
+            )
+        } else {
+            val message = outcome.exceptionOrNull()?.let {
+                it.message ?: it.javaClass.simpleName
+            } ?: "Unknown probe failure"
+            shizukuBackendStatus = shizukuBackendStatus.copy(
+                probeOutcome = ShizukuProbeOutcome.FAILED,
+                probeSummary = null,
+                probeFailure = message
+            )
+        }
+
+        if (shizukuBackendStatus.probeOutcome == ShizukuProbeOutcome.FAILED) {
+            stopShizukuProbeService()
+        }
+        render()
+        if (shizukuBackendStatus.probeOutcome == ShizukuProbeOutcome.FAILED) {
+            setStatus(
+                "Shizuku read-only probe failed: " +
+                    (shizukuBackendStatus.probeFailure ?: "unknown error"),
+                warningColor
+            )
+        } else {
+            setStatus("Shizuku read-only probe succeeded.", successColor)
+        }
+    }
+
+    private fun stopShizukuProbeService() {
+        val wasBound = shizukuServiceBound
+        shizukuServiceBound = false
+        shizukuProbeService = null
+
+        if (wasBound && runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
+            runCatching {
+                Shizuku.unbindUserService(
+                    shizukuUserServiceArgs,
+                    shizukuServiceConnection,
+                    true
+                )
             }
         }
     }
@@ -539,7 +1018,21 @@ class MainActivity : Activity() {
             it.packageName in workingSelection
         }.toBooleanArray()
 
-        lateinit var dialog: AlertDialog
+        val packageList = android.widget.ListView(this)
+        packageList.choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
+        packageList.adapter = android.widget.ArrayAdapter(
+            this,
+            android.R.layout.simple_list_item_multiple_choice,
+            labels
+        )
+        packageList.setOnItemClickListener { _, _, position, _ ->
+            val packageName = packages[position].packageName
+            if (packageList.isItemChecked(position)) {
+                workingSelection += packageName
+            } else {
+                workingSelection -= packageName
+            }
+        }
 
         fun setAllPackagesChecked(isChecked: Boolean) {
             workingSelection.clear()
@@ -547,68 +1040,52 @@ class MainActivity : Activity() {
                 workingSelection.addAll(packages.map { it.packageName })
             }
             packages.indices.forEach { index ->
-                dialog.listView.setItemChecked(index, isChecked)
+                packageList.setItemChecked(index, isChecked)
             }
         }
 
-        val titleContainer = LinearLayout(this).apply {
+        val selectionActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            addView(
+                makeSecondaryButton("Select all") {
+                    setAllPackagesChecked(true)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(
+                makeSecondaryButton("Select none") {
+                    setAllPackagesChecked(false)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+        }
+
+        val listHeightPx = (resources.displayMetrics.heightPixels * 0.52f)
+            .roundToInt()
+            .coerceAtLeast(dp(280))
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(16), dp(16), dp(4))
-
+            setPadding(dp(12), 0, dp(12), 0)
             addView(
-                TextView(this@MainActivity).apply {
-                    text = "Select packages"
-                    textSize = 20f
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                }
+                selectionActions,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
             )
-
             addView(
-                LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.END
-
-                    addView(
-                        TextView(this@MainActivity).apply {
-                            text = "Select all"
-                            textSize = 14f
-                            gravity = Gravity.CENTER
-                            isClickable = true
-                            isFocusable = true
-                            setPadding(dp(12), dp(12), dp(12), dp(12))
-                            setOnClickListener {
-                                setAllPackagesChecked(true)
-                            }
-                        }
-                    )
-
-                    addView(
-                        TextView(this@MainActivity).apply {
-                            text = "Select none"
-                            textSize = 14f
-                            gravity = Gravity.CENTER
-                            isClickable = true
-                            isFocusable = true
-                            setPadding(dp(12), dp(12), dp(8), dp(12))
-                            setOnClickListener {
-                                setAllPackagesChecked(false)
-                            }
-                        }
-                    )
-                }
+                packageList,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    listHeightPx
+                )
             )
         }
 
-        dialog = AlertDialog.Builder(this)
-            .setCustomTitle(titleContainer)
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                val packageName = packages[which].packageName
-                if (isChecked) {
-                    workingSelection += packageName
-                } else {
-                    workingSelection -= packageName
-                }
-            }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Select packages")
+            .setView(content)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Done") { _, _ ->
                 selectedPackageNames.clear()
@@ -618,6 +1095,9 @@ class MainActivity : Activity() {
             .create()
 
         dialog.show()
+        packages.indices.forEach { index ->
+            packageList.setItemChecked(index, checked[index])
+        }
     }
 
     private fun makeHeader(title: String, subtitle: String): View {
@@ -864,6 +1344,16 @@ class MainActivity : Activity() {
         } else {
             null
         }
+        val capabilitySnapshot = CapabilityScanner(shizukuBackendStatus).scan()
+        val shizukuApkReader = if (
+            shizukuBackendStatus.diagnosticsAvailability() ==
+                CapabilityAvailability.AVAILABLE &&
+            shizukuServiceBound
+        ) {
+            shizukuProbeService?.let(::ShizukuPackageApkReader)
+        } else {
+            null
+        }
         sessionStore.markRunning(outputUri.toString())
 
         render()
@@ -872,7 +1362,7 @@ class MainActivity : Activity() {
         executor.submit {
             try {
                 val device = DeviceInfo.read()
-                val capabilities = CapabilityScanner().scan()
+                val capabilities = capabilitySnapshot
 
                 val writer = ArchiveWriter(
                     resolver = contentResolver,
@@ -907,13 +1397,14 @@ class MainActivity : Activity() {
                     }
                 }
 
-                writer.write(
+                val writeResult = writer.write(
                     outputUri = outputUri,
                     selectedTrees = roots,
                     includePackages = preservePackages,
                     includePackageApks = preservePackageApks,
                     selectedPackageNames = packageNames,
-                    listener = progress
+                    listener = progress,
+                    shizukuApkReader = shizukuApkReader
                 )
 
                 val verification = ArchiveVerifier(contentResolver)
@@ -924,6 +1415,7 @@ class MainActivity : Activity() {
                         verification.error ?: "Archive verification failed."
                     )
                     runOnUiThread {
+                        updateShizukuApkFallbackStatus(writeResult)
                         render()
                         setStatus(
                             "Archive created, but verification failed.",
@@ -936,13 +1428,23 @@ class MainActivity : Activity() {
                 sessionStore.markVerified()
 
                 runOnUiThread {
+                    updateShizukuApkFallbackStatus(writeResult)
                     render()
+                    val fallbackSummary =
+                        if (writeResult.shizukuApkFallbackAttempts > 0) {
+                            " Shizuku APK fallback: " +
+                                writeResult.shizukuApkFallbackSuccesses + "/" +
+                                writeResult.shizukuApkFallbackAttempts +
+                                " attempted source(s) collected."
+                        } else {
+                            ""
+                        }
                     setStatus(
                         "Backup verified: " +
                             verification.artifactCount +
                             " artifacts, " +
                             formatBytes(verification.verifiedBytes) +
-                            " checked.",
+                            " checked." + fallbackSummary,
                         if (verification.failedArtifacts == 0) {
                             successColor
                         } else {
@@ -964,6 +1466,31 @@ class MainActivity : Activity() {
                 }
             }
         }
+    }
+
+    private fun updateShizukuApkFallbackStatus(result: BackupWriteResult) {
+        if (result.shizukuApkFallbackAttempts <= 0) return
+
+        val successes = result.shizukuApkFallbackSuccesses
+        shizukuBackendStatus = shizukuBackendStatus.copy(
+            apkFallbackOutcome = if (successes > 0) {
+                ShizukuApkFallbackOutcome.SUCCEEDED
+            } else {
+                ShizukuApkFallbackOutcome.FAILED
+            },
+            apkFallbackSummary = if (successes > 0) {
+                "Shizuku read " + successes + " of " +
+                    result.shizukuApkFallbackAttempts +
+                    " APK source(s) that the normal app process could not open."
+            } else {
+                null
+            },
+            apkFallbackFailure = if (successes == 0) {
+                "No inaccessible APK source could be opened through Shizuku."
+            } else {
+                null
+            }
+        )
     }
 
     private fun verifyLastArchive(outputUri: String) {
@@ -1098,5 +1625,7 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_TREE = 1001
         private const val REQUEST_CREATE_ARCHIVE = 1002
+        private const val REQUEST_SHIZUKU_PERMISSION = 1003
+        private const val SHIZUKU_SETUP_URL = "https://shizuku.rikka.app/"
     }
 }
