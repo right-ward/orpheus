@@ -537,6 +537,9 @@ class MainActivity : Activity() {
         if (!binderConnected) {
             shizukuBackendStatus = ShizukuBackendStatus()
             shizukuPermissionRequestPending = false
+            shizukuProbeInProgress = false
+            shizukuServiceBound = false
+            shizukuProbeService = null
             return
         }
 
@@ -738,9 +741,13 @@ class MainActivity : Activity() {
                 )
             }
 
-            val privilege = ShizukuPrivilegeClassifier
-                .classify(userServiceUid)
-                .displayName
+            val classifiedPrivilege = ShizukuPrivilegeClassifier.classify(userServiceUid)
+            if (classifiedPrivilege == ShizukuPrivilege.UNKNOWN) {
+                throw SecurityException(
+                    "Unexpected Shizuku UserService UID: " + userServiceUid + "."
+                )
+            }
+            val privilege = classifiedPrivilege.displayName
             val release = report.optString("android_release", "unknown")
             val apiLevel = report.optInt("android_sdk", -1)
             val identity = report.getString("identity")
