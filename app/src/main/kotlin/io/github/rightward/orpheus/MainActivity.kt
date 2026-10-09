@@ -1519,7 +1519,7 @@ class MainActivity : Activity() {
 
                 runOnUiThread {
                     updateShizukuApkFallbackStatus(writeResult)
-                        updateShizukuSystemSettingsStatus(writeResult)
+                    updateShizukuSystemSettingsStatus(writeResult)
                     render()
                     val fallbackSummary =
                         if (writeResult.shizukuApkFallbackAttempts > 0) {
