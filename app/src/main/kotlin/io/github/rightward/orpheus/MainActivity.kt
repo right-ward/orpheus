@@ -1411,6 +1411,7 @@ class MainActivity : Activity() {
         val roots = selectedTrees.toList()
         val preservePackages = includePackagePreservation
         val preservePackageApks = includePackageContent
+        val preserveSystemSettings = includeSystemSettings
         val packageNames = if (preserveOnlySelectedPackages) {
             selectedPackageNames.toSet()
         } else {
@@ -1419,7 +1420,7 @@ class MainActivity : Activity() {
         val capabilitySnapshot = CapabilityScanner(shizukuBackendStatus).scan()
         val expectedShizukuUid = shizukuBackendStatus.serverUid
         val shizukuSettingsProvider: (() -> String)? = if (
-            includeSystemSettings &&
+            preserveSystemSettings &&
             shizukuBackendStatus.diagnosticsAvailability() ==
                 CapabilityAvailability.AVAILABLE &&
             shizukuServiceBound
@@ -1490,7 +1491,7 @@ class MainActivity : Activity() {
                     selectedPackageNames = packageNames,
                     listener = progress,
                     shizukuApkReader = shizukuApkReader,
-                    includeSystemSettings = includeSystemSettings,
+                    includeSystemSettings = preserveSystemSettings,
                     shizukuSettingsProvider = shizukuSettingsProvider,
                     expectedShizukuUid = expectedShizukuUid
                 )
@@ -1548,7 +1549,13 @@ class MainActivity : Activity() {
                             " artifacts, " +
                             formatBytes(verification.verifiedBytes) +
                             " checked." + fallbackSummary + settingsSummary,
-                        if (verification.failedArtifacts == 0) {
+                        if (
+                            verification.failedArtifacts == 0 &&
+                            writeResult.shizukuSettingsSnapshotOutcome !=
+                                ShizukuSettingsSnapshotOutcome.PARTIAL &&
+                            writeResult.shizukuSettingsSnapshotOutcome !=
+                                ShizukuSettingsSnapshotOutcome.FAILED
+                        ) {
                             successColor
                         } else {
                             warningColor
