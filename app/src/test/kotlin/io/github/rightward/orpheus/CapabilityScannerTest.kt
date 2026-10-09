@@ -20,6 +20,10 @@ class CapabilityScannerTest {
             CapabilityAvailability.NOT_TESTED,
             snapshot.forId(CapabilityId.SHIZUKU_PACKAGE_APK_FALLBACK)?.availability
         )
+        assertEquals(
+            CapabilityAvailability.NOT_TESTED,
+            snapshot.forId(CapabilityId.SHIZUKU_SYSTEM_SETTINGS_SNAPSHOT)?.availability
+        )
     }
 
     @Test
@@ -66,6 +70,10 @@ class CapabilityScannerTest {
             CapabilityAvailability.NOT_TESTED,
             snapshot.forId(CapabilityId.SHIZUKU_PACKAGE_APK_FALLBACK)?.availability
         )
+        assertEquals(
+            CapabilityAvailability.NOT_TESTED,
+            snapshot.forId(CapabilityId.SHIZUKU_SYSTEM_SETTINGS_SNAPSHOT)?.availability
+        )
         assertNotNull(snapshot.forId(CapabilityId.PACKAGE_INVENTORY))
 
         val afterFallback = CapabilityScanner(
@@ -80,6 +88,10 @@ class CapabilityScannerTest {
         assertEquals(
             CapabilityAvailability.AVAILABLE,
             afterFallback.forId(CapabilityId.SHIZUKU_PACKAGE_APK_FALLBACK)?.availability
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_TESTED,
+            afterFallback.forId(CapabilityId.SHIZUKU_SYSTEM_SETTINGS_SNAPSHOT)?.availability
         )
     }
 }

@@ -26,7 +26,11 @@ data class BackupWriteResult(
     val selectionErrors: List<String>,
     val packageCount: Int,
     val shizukuApkFallbackAttempts: Int = 0,
-    val shizukuApkFallbackSuccesses: Int = 0
+    val shizukuApkFallbackSuccesses: Int = 0,
+    val shizukuSettingsSnapshotOutcome: ShizukuSettingsSnapshotOutcome =
+        ShizukuSettingsSnapshotOutcome.NOT_RUN,
+    val shizukuSettingsSnapshotSummary: String? = null,
+    val shizukuSettingsSnapshotFailure: String? = null
 )
 
 class ArchiveWriter(
@@ -42,9 +46,12 @@ class ArchiveWriter(
         includePackageApks: Boolean,
         selectedPackageNames: Set<String>?,
         listener: BackupProgressListener,
-        shizukuApkReader: PackageApkSourceReader? = null
+        shizukuApkReader: PackageApkSourceReader? = null,
+        includeSystemSettings: Boolean = false,
+        shizukuSettingsProvider: (() -> String)? = null,
+        expectedShizukuUid: Int? = null
     ): BackupWriteResult {
-        require(selectedTrees.isNotEmpty() || includePackages) {
+        require(selectedTrees.isNotEmpty() || includePackages || includeSystemSettings) {
             "At least one preservation source must be selected"
         }
 
@@ -56,6 +63,10 @@ class ArchiveWriter(
         var packageCount = 0
         var shizukuApkFallbackAttempts = 0
         var shizukuApkFallbackSuccesses = 0
+        var shizukuSettingsSnapshotOutcome =
+            ShizukuSettingsSnapshotOutcome.NOT_RUN
+        var shizukuSettingsSnapshotSummary: String? = null
+        var shizukuSettingsSnapshotFailure: String? = null
 
         val rawOutput = resolver.openOutputStream(outputUri)
             ?: throw IOException("Unable to open archive output")
@@ -203,6 +214,102 @@ class ArchiveWriter(
                     }
                 }
 
+                if (includeSystemSettings) {
+                    val archivePath = ArchivePaths.SYSTEM_SETTINGS
+                    val artifactId = "system-settings-snapshot"
+                    val source = "shizuku:system-settings"
+
+                    if (shizukuSettingsProvider == null || expectedShizukuUid == null) {
+                        artifacts += ArchiveArtifact(
+                            id = artifactId,
+                            kind = "system_settings_snapshot",
+                            archivePath = archivePath,
+                            source = source,
+                            status = ArtifactStatus.REQUIRES_PRIVILEGE,
+                            sizeBytes = 0L,
+                            sha256 = null,
+                            modifiedAtEpochMs = null,
+                            errorCode = "SHIZUKU_SETTINGS_SOURCE_UNAVAILABLE"
+                        )
+                        shizukuSettingsSnapshotOutcome =
+                            ShizukuSettingsSnapshotOutcome.FAILED
+                        shizukuSettingsSnapshotFailure =
+                            "Shizuku was unavailable when the settings snapshot was requested."
+                    } else {
+                        try {
+                            val snapshot = ShizukuSystemSettingsCollector.normalize(
+                                rawReport = shizukuSettingsProvider.invoke(),
+                                expectedUid = expectedShizukuUid,
+                                collectedAtUtc = nowUtc()
+                            )
+
+                            if (snapshot.readableCount + snapshot.notSetCount == 0) {
+                                artifacts += ArchiveArtifact(
+                                    id = artifactId,
+                                    kind = "system_settings_snapshot",
+                                    archivePath = archivePath,
+                                    source = source,
+                                    status = ArtifactStatus.FAILED,
+                                    sizeBytes = 0L,
+                                    sha256 = null,
+                                    modifiedAtEpochMs = null,
+                                    errorCode = "SYSTEM_SETTINGS_READ_FAILED"
+                                )
+                                shizukuSettingsSnapshotOutcome =
+                                    ShizukuSettingsSnapshotOutcome.FAILED
+                                shizukuSettingsSnapshotFailure =
+                                    "No allow-listed settings could be read."
+                            } else {
+                                val bytes = snapshot.json.toByteArray(Charsets.UTF_8)
+                                writeEntry(zip, archivePath, snapshot.json)
+                                artifacts += ArchiveArtifact(
+                                    id = artifactId,
+                                    kind = "system_settings_snapshot",
+                                    archivePath = archivePath,
+                                    source = source,
+                                    status = ArtifactStatus.PARTIAL,
+                                    sizeBytes = bytes.size.toLong(),
+                                    sha256 = Sha256.digest(bytes),
+                                    modifiedAtEpochMs = null
+                                )
+                                shizukuSettingsSnapshotOutcome =
+                                    if (snapshot.failedCount > 0) {
+                                        ShizukuSettingsSnapshotOutcome.PARTIAL
+                                    } else {
+                                        ShizukuSettingsSnapshotOutcome.SUCCEEDED
+                                    }
+                                shizukuSettingsSnapshotSummary =
+                                    "Read " + snapshot.readableCount +
+                                        " allow-listed value(s); " +
+                                        snapshot.notSetCount + " not set; " +
+                                        snapshot.failedCount + " read failure(s)."
+                                shizukuSettingsSnapshotFailure =
+                                    if (snapshot.failedCount > 0) {
+                                        "Some allow-listed settings could not be read."
+                                    } else {
+                                        null
+                                    }
+                            }
+                        } catch (_: Exception) {
+                            artifacts += ArchiveArtifact(
+                                id = artifactId,
+                                kind = "system_settings_snapshot",
+                                archivePath = archivePath,
+                                source = source,
+                                status = ArtifactStatus.FAILED,
+                                sizeBytes = 0L,
+                                sha256 = null,
+                                modifiedAtEpochMs = null,
+                                errorCode = "SYSTEM_SETTINGS_SNAPSHOT_FAILED"
+                            )
+                            shizukuSettingsSnapshotOutcome =
+                                ShizukuSettingsSnapshotOutcome.FAILED
+                            shizukuSettingsSnapshotFailure =
+                                "The Shizuku settings snapshot could not be collected or validated."
+                        }
+                    }
+                }
+
                 val manifest = ArchiveManifest(
                     archiveId = archiveId,
                     createdAt = nowUtc(),
@@ -248,7 +355,10 @@ class ArchiveWriter(
             selectionErrors = selectionErrors,
             packageCount = packageCount,
             shizukuApkFallbackAttempts = shizukuApkFallbackAttempts,
-            shizukuApkFallbackSuccesses = shizukuApkFallbackSuccesses
+            shizukuApkFallbackSuccesses = shizukuApkFallbackSuccesses,
+            shizukuSettingsSnapshotOutcome = shizukuSettingsSnapshotOutcome,
+            shizukuSettingsSnapshotSummary = shizukuSettingsSnapshotSummary,
+            shizukuSettingsSnapshotFailure = shizukuSettingsSnapshotFailure
         )
     }
 

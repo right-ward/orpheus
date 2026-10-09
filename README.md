@@ -28,6 +28,7 @@ The current app:
 - requests Shizuku authorization before running privileged operations
 - runs a read-only `id`/`getprop` probe in an isolated Shizuku UserService and reports failures explicitly
 - can read PackageManager-reported APK files through a validated Shizuku file descriptor when normal app access fails
+- optionally records a strict allow-list of display, rotation, haptic-feedback, sound-effects, and animation settings via Shizuku; the snapshot is partial and is not restored
 - keeps deeper protected-data collectors and cross-device testing unfinished
 - performs no restore or destructive operation
 
