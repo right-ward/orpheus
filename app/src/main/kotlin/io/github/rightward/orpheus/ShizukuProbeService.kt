@@ -35,6 +35,68 @@ class ShizukuProbeService @Keep constructor() : IShizukuProbeService.Stub() {
             .toString()
     }
 
+    override fun collectAllowlistedSystemSettings(): String {
+        val settings = JSONObject()
+
+        ShizukuSystemSettingsCollector.ALLOWLIST.forEach { (namespace, keys) ->
+            val values = runCatching {
+                readAllowlistedSettings(namespace, keys)
+            }.getOrNull()
+            val namespaceJson = JSONObject()
+
+            keys.forEach { key ->
+                val value = values?.get(key)
+                val entry = when {
+                    values == null -> JSONObject()
+                        .put("status", "failed")
+                        .put("error_code", "SETTING_READ_FAILED")
+                    value == null -> JSONObject()
+                        .put("status", "not_set")
+                    value.length > MAX_SETTING_VALUE_LENGTH -> JSONObject()
+                        .put("status", "failed")
+                        .put("error_code", "SETTING_READ_FAILED")
+                    else -> JSONObject()
+                        .put("status", "available")
+                        .put("value", value)
+                }
+                namespaceJson.put(key, entry)
+            }
+
+            settings.put(namespace, namespaceJson)
+        }
+
+        return JSONObject()
+            .put("uid", Os.getuid())
+            .put("settings", settings)
+            .toString()
+    }
+
+    private fun readAllowlistedSettings(
+        namespace: String,
+        allowedKeys: List<String>
+    ): Map<String, String> {
+        val output = runReadOnlyCommand(
+            listOf("/system/bin/settings", "list", namespace)
+        )
+        val allowlist = allowedKeys.toHashSet()
+        val values = LinkedHashMap<String, String>()
+
+        output.lineSequence().forEach { line ->
+            val separator = line.indexOf('=')
+            if (separator <= 0) return@forEach
+
+            val key = line.substring(0, separator).trim()
+            if (key in allowlist) {
+                values[key] = line.substring(separator + 1)
+            }
+        }
+
+        if (values.isEmpty()) {
+            throw IOException("Settings namespace returned no parseable values.")
+        }
+        return values
+    }
+
     override fun openPackageApk(absolutePath: String): ParcelFileDescriptor {
         val apkRoot = File(APK_SOURCE_ROOT).canonicalFile
         val candidate = File(absolutePath).canonicalFile
@@ -104,5 +166,6 @@ class ShizukuProbeService @Keep constructor() : IShizukuProbeService.Stub() {
         const val APK_SOURCE_ROOT = "/data/app"
         const val COMMAND_TIMEOUT_SECONDS = 5L
         const val OUTPUT_DRAIN_TIMEOUT_MILLIS = 500L
+        const val MAX_SETTING_VALUE_LENGTH = 4096
     }
 }
