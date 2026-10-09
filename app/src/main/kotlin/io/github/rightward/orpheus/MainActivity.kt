@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private var packageScanInProgress = false
     private var includePackagePreservation = true
     private var includePackageContent = true
+    private var includeSystemSettings = false
     private var preserveOnlySelectedPackages = false
     private var selectedPackageNames = linkedSetOf<String>()
     private var packageSelectionInitialized = false
@@ -63,7 +64,7 @@ class MainActivity : Activity() {
         )
             .processNameSuffix("orpheus_probe")
             .tag("io.github.rightward.orpheus.read_only_probe")
-            .version(2)
+            .version(3)
             .daemon(false)
     }
 
@@ -380,6 +381,47 @@ class MainActivity : Activity() {
 
         addSpacer(12)
 
+        val canCollectSystemSettings =
+            shizukuBackendStatus.diagnosticsAvailability() ==
+                CapabilityAvailability.AVAILABLE &&
+                shizukuServiceBound &&
+                shizukuProbeService != null
+
+        addCard {
+            addSectionTitle("SYSTEM SETTINGS PRESERVATION")
+            addBody(
+                "Optional read-only snapshot of a strict allow-list of display, rotation, " +
+                    "haptic-feedback, sound-effects, and animation settings. It is not a " +
+                    "complete settings backup and Orpheus does not restore these values yet."
+            )
+
+            addSpacer(6)
+
+            addView(
+                Switch(this@MainActivity).apply {
+                    text = "Preserve allow-listed system settings (Shizuku)"
+                    isChecked = includeSystemSettings
+                    isEnabled = canCollectSystemSettings || includeSystemSettings
+                    setTextColor(primaryTextColor)
+                    setOnCheckedChangeListener { _, checked ->
+                        includeSystemSettings = checked
+                        render()
+                    }
+                }
+            )
+
+            addBody(
+                if (canCollectSystemSettings) {
+                    "Shizuku probe passed. Only the documented allow-list is written to the archive."
+                } else {
+                    "Run the successful read-only Shizuku probe and keep Shizuku connected to enable this option."
+                },
+                primary = false
+            )
+        }
+
+        addSpacer(12)
+
         addCard {
             addSectionTitle("BACKUP")
             addBody(
@@ -401,7 +443,8 @@ class MainActivity : Activity() {
                 openArchiveCreator()
             }.apply {
                 isEnabled = selectedTrees.isNotEmpty() ||
-                    includePackagePreservation
+                    includePackagePreservation ||
+                    includeSystemSettings
                 alpha = if (isEnabled) 1.0f else 0.45f
             }
             addView(backupButton)
@@ -581,7 +624,22 @@ class MainActivity : Activity() {
                 ShizukuApkFallbackOutcome.NOT_RUN
             },
             apkFallbackSummary = if (preserveProbe) previous.apkFallbackSummary else null,
-            apkFallbackFailure = if (preserveProbe) previous.apkFallbackFailure else null
+            apkFallbackFailure = if (preserveProbe) previous.apkFallbackFailure else null,
+            settingsSnapshotOutcome = if (preserveProbe) {
+                previous.settingsSnapshotOutcome
+            } else {
+                ShizukuSettingsSnapshotOutcome.NOT_RUN
+            },
+            settingsSnapshotSummary = if (preserveProbe) {
+                previous.settingsSnapshotSummary
+            } else {
+                null
+            },
+            settingsSnapshotFailure = if (preserveProbe) {
+                previous.settingsSnapshotFailure
+            } else {
+                null
+            }
         )
     }
 
@@ -612,7 +670,8 @@ class MainActivity : Activity() {
             uidDetail,
             pendingDetail,
             shizukuBackendStatus.diagnosticsDetail(),
-            shizukuBackendStatus.apkFallbackDetail()
+            shizukuBackendStatus.apkFallbackDetail(),
+            shizukuBackendStatus.systemSettingsSnapshotDetail()
         ).joinToString("\n")
     }
 
@@ -715,7 +774,10 @@ class MainActivity : Activity() {
         shizukuBackendStatus = shizukuBackendStatus.copy(
             probeOutcome = ShizukuProbeOutcome.NOT_RUN,
             probeSummary = null,
-            probeFailure = null
+            probeFailure = null,
+            settingsSnapshotOutcome = ShizukuSettingsSnapshotOutcome.NOT_RUN,
+            settingsSnapshotSummary = null,
+            settingsSnapshotFailure = null
         )
         render()
 
@@ -997,7 +1059,14 @@ class MainActivity : Activity() {
                 "APK content: enabled"
         }
 
-        return fileSummary + " · " + packageSummary + " · " + apkSummary
+        val settingsSummary = if (includeSystemSettings) {
+            "System settings: allow-listed snapshot enabled"
+        } else {
+            "System settings: disabled"
+        }
+
+        return fileSummary + " · " + packageSummary + " · " +
+            apkSummary + " · " + settingsSummary
     }
 
     private fun openPackageSelectionDialog() {
@@ -1317,9 +1386,12 @@ class MainActivity : Activity() {
     }
 
     private fun openArchiveCreator() {
-        if (selectedTrees.isEmpty() && !includePackagePreservation) {
+        if (selectedTrees.isEmpty() &&
+            !includePackagePreservation &&
+            !includeSystemSettings
+        ) {
             setStatus(
-                "Select a folder or enable installed-app preservation.",
+                "Select a folder or enable package/settings preservation.",
                 warningColor
             )
             return
@@ -1345,6 +1417,19 @@ class MainActivity : Activity() {
             null
         }
         val capabilitySnapshot = CapabilityScanner(shizukuBackendStatus).scan()
+        val expectedShizukuUid = shizukuBackendStatus.serverUid
+        val shizukuSettingsProvider: (() -> String)? = if (
+            includeSystemSettings &&
+            shizukuBackendStatus.diagnosticsAvailability() ==
+                CapabilityAvailability.AVAILABLE &&
+            shizukuServiceBound
+        ) {
+            shizukuProbeService?.let { service ->
+                { service.collectAllowlistedSystemSettings() }
+            }
+        } else {
+            null
+        }
         val shizukuApkReader = if (
             shizukuBackendStatus.diagnosticsAvailability() ==
                 CapabilityAvailability.AVAILABLE &&
@@ -1404,7 +1489,10 @@ class MainActivity : Activity() {
                     includePackageApks = preservePackageApks,
                     selectedPackageNames = packageNames,
                     listener = progress,
-                    shizukuApkReader = shizukuApkReader
+                    shizukuApkReader = shizukuApkReader,
+                    includeSystemSettings = includeSystemSettings,
+                    shizukuSettingsProvider = shizukuSettingsProvider,
+                    expectedShizukuUid = expectedShizukuUid
                 )
 
                 val verification = ArchiveVerifier(contentResolver)
@@ -1416,6 +1504,7 @@ class MainActivity : Activity() {
                     )
                     runOnUiThread {
                         updateShizukuApkFallbackStatus(writeResult)
+                        updateShizukuSystemSettingsStatus(writeResult)
                         render()
                         setStatus(
                             "Archive created, but verification failed.",
@@ -1429,6 +1518,7 @@ class MainActivity : Activity() {
 
                 runOnUiThread {
                     updateShizukuApkFallbackStatus(writeResult)
+                        updateShizukuSystemSettingsStatus(writeResult)
                     render()
                     val fallbackSummary =
                         if (writeResult.shizukuApkFallbackAttempts > 0) {
@@ -1439,12 +1529,25 @@ class MainActivity : Activity() {
                         } else {
                             ""
                         }
+                    val settingsSummary = when (
+                        writeResult.shizukuSettingsSnapshotOutcome
+                    ) {
+                        ShizukuSettingsSnapshotOutcome.SUCCEEDED ->
+                            " System settings snapshot collected: " +
+                                (writeResult.shizukuSettingsSnapshotSummary ?: "complete.")
+                        ShizukuSettingsSnapshotOutcome.PARTIAL ->
+                            " System settings snapshot is partial: " +
+                                (writeResult.shizukuSettingsSnapshotSummary ?: "some values failed.")
+                        ShizukuSettingsSnapshotOutcome.FAILED ->
+                            " System settings snapshot failed."
+                        ShizukuSettingsSnapshotOutcome.NOT_RUN -> ""
+                    }
                     setStatus(
                         "Backup verified: " +
                             verification.artifactCount +
                             " artifacts, " +
                             formatBytes(verification.verifiedBytes) +
-                            " checked." + fallbackSummary,
+                            " checked." + fallbackSummary + settingsSummary,
                         if (verification.failedArtifacts == 0) {
                             successColor
                         } else {
@@ -1490,6 +1593,17 @@ class MainActivity : Activity() {
             } else {
                 null
             }
+        )
+    }
+
+    private fun updateShizukuSystemSettingsStatus(result: BackupWriteResult) {
+        val outcome = result.shizukuSettingsSnapshotOutcome
+        if (outcome == ShizukuSettingsSnapshotOutcome.NOT_RUN) return
+
+        shizukuBackendStatus = shizukuBackendStatus.copy(
+            settingsSnapshotOutcome = outcome,
+            settingsSnapshotSummary = result.shizukuSettingsSnapshotSummary,
+            settingsSnapshotFailure = result.shizukuSettingsSnapshotFailure
         )
     }
 
