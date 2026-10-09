@@ -32,7 +32,7 @@ The UserService canonicalizes the requested path and only opens regular files co
 
 APK access is tested per source path. A successful read does not mean every APK is accessible, does not include unchanged system APKs, and does not grant access to private application data. The aggregate APK-preservation capability remains limited; the Shizuku fallback capability changes from not tested to available only after at least one fallback read succeeds. Failed fallback attempts remain explicit failed artifacts.
 
-The service exposes one additional operation: open a read-only file descriptor for a canonical regular APK file under `/data/app/`. Paths outside this root are rejected; the interface does not accept shell commands or expose arbitrary file reads.
+The service exposes one additional operation: open a read-only file descriptor for a canonical regular file with an `.apk` extension under `/data/app/`. Paths outside this root and non-APK files are rejected; the interface does not accept shell commands or expose arbitrary file reads. The UserService version is incremented when its interface changes so an older bound implementation is not reused.
 
 ## Capability states
 

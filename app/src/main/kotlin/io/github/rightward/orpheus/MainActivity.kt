@@ -63,7 +63,7 @@ class MainActivity : Activity() {
         )
             .processNameSuffix("orpheus_probe")
             .tag("io.github.rightward.orpheus.read_only_probe")
-            .version(1)
+            .version(2)
             .daemon(false)
     }
 

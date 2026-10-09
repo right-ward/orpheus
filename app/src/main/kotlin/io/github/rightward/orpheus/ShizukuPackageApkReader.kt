@@ -16,6 +16,7 @@ class ShizukuPackageApkReader(
         private const val APK_SOURCE_ROOT = "/data/app"
 
         fun supportsPath(path: String): Boolean =
-            path.startsWith(APK_SOURCE_ROOT + File.separator)
+            path.startsWith(APK_SOURCE_ROOT + File.separator) &&
+                path.endsWith(".apk", ignoreCase = true)
     }
 }

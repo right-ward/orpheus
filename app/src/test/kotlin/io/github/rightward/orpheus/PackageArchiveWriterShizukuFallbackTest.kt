@@ -70,6 +70,7 @@ class PackageArchiveWriterShizukuFallbackTest {
         assertNotNull(apkArtifact.sha256)
         assertEquals("/data/app/example.app/base.apk", requestedPath)
         assertTrue(ShizukuPackageApkReader.supportsPath("/data/app/example/base.apk"))
+        assertTrue(!ShizukuPackageApkReader.supportsPath("/data/app/example/oat/arm64/base.odex"))
         assertTrue(!ShizukuPackageApkReader.supportsPath("/data/system/packages.xml"))
 
         var archivedPayload: ByteArray? = null

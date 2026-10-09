@@ -45,8 +45,10 @@ class ShizukuProbeService @Keep constructor() : IShizukuProbeService.Stub() {
                 "Only PackageManager APK paths under /data/app may be opened."
             )
         }
-        if (!candidate.isFile) {
-            throw FileNotFoundException("The package APK is not a regular file.")
+        if (!candidate.isFile ||
+            !candidate.name.endsWith(".apk", ignoreCase = true)
+        ) {
+            throw FileNotFoundException("The package APK is not a regular APK file.")
         }
 
         return ParcelFileDescriptor.open(
