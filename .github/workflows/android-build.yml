@@ -47,6 +47,7 @@ jobs:
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       source_ref: ${{ steps.version.outputs.source_ref }}
+      source_branch: ${{ steps.version.outputs.source_branch }}
       artifact_ref: ${{ steps.version.outputs.artifact_ref }}
       version: ${{ steps.version.outputs.version }}
       version_code: ${{ steps.version.outputs.version_code }}
@@ -106,17 +107,17 @@ jobs:
           set -euo pipefail
 
           metadata_file="app/build.gradle.kts"
-          source_ref="${SOURCE:-$GITHUB_REF}"
+          source_branch="${SOURCE:-$GITHUB_REF}"
           artifact_ref="${SOURCE:-$GITHUB_REF_NAME}"
 
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            source_ref="$GITHUB_REF"
+            source_branch="$GITHUB_REF"
             artifact_ref="$GITHUB_REF_NAME"
           elif [[ "$ACTION" == "release" ]]; then
             # Rebuild the existing release from the selected source branch.
             # The tag is the release identity and must be an ancestor of this source;
             # the branch may contain fixes while keeping the same app version.
-            source_ref="${SOURCE:-$GITHUB_REF}"
+            source_branch="${SOURCE:-$GITHUB_REF}"
             artifact_ref="$RELEASE_TAG"
           fi
 
@@ -136,8 +137,11 @@ jobs:
             fi
           fi
 
+          source_ref="$(git rev-parse HEAD^{commit})"
+
           {
             echo "source_ref=$source_ref"
+            echo "source_branch=$source_branch"
             echo "artifact_ref=$artifact_ref"
             echo "version=$version_name"
             echo "version_code=$version_code"
@@ -277,6 +281,7 @@ jobs:
         env:
           APK_ARCH: ${{ matrix.arch }}
           SOURCE_REF: ${{ needs.prepare.outputs.source_ref }}
+          SOURCE_BRANCH: ${{ needs.prepare.outputs.source_branch }}
           ARTIFACT_REF: ${{ needs.prepare.outputs.artifact_ref }}
           APP_VERSION: ${{ needs.prepare.outputs.version }}
           ABI: ${{ matrix.abi }}
@@ -290,6 +295,7 @@ jobs:
               "abi=$ABI" \
               "target=$TARGET" \
               "source_ref=$SOURCE_REF" \
+              "source_branch=$SOURCE_BRANCH" \
               "artifact_ref=$ARTIFACT_REF" \
               "version=$APP_VERSION"
             printf '\n%s\n' '----- Gradle build output -----'
