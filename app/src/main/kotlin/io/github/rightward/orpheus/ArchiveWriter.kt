@@ -24,7 +24,9 @@ data class BackupWriteResult(
     val archiveId: String,
     val artifacts: List<ArchiveArtifact>,
     val selectionErrors: List<String>,
-    val packageCount: Int
+    val packageCount: Int,
+    val shizukuApkFallbackAttempts: Int = 0,
+    val shizukuApkFallbackSuccesses: Int = 0
 )
 
 class ArchiveWriter(
@@ -39,7 +41,8 @@ class ArchiveWriter(
         includePackages: Boolean,
         includePackageApks: Boolean,
         selectedPackageNames: Set<String>?,
-        listener: BackupProgressListener
+        listener: BackupProgressListener,
+        shizukuApkReader: PackageApkSourceReader? = null
     ): BackupWriteResult {
         require(selectedTrees.isNotEmpty() || includePackages) {
             "At least one preservation source must be selected"
@@ -51,6 +54,8 @@ class ArchiveWriter(
         var artifactIndex = 0
         var processedBytes = 0L
         var packageCount = 0
+        var shizukuApkFallbackAttempts = 0
+        var shizukuApkFallbackSuccesses = 0
 
         val rawOutput = resolver.openOutputStream(outputUri)
             ?: throw IOException("Unable to open archive output")
@@ -187,11 +192,14 @@ class ArchiveWriter(
                                         processedBytes
                                     )
                                 }
-                            }
+                            },
+                            shizukuApkReader = shizukuApkReader
                         )
 
                         artifacts += packageResult.artifacts
                         packageCount = packageResult.packageCount
+                        shizukuApkFallbackAttempts = packageResult.shizukuApkFallbackAttempts
+                        shizukuApkFallbackSuccesses = packageResult.shizukuApkFallbackSuccesses
                     }
                 }
 
@@ -238,7 +246,9 @@ class ArchiveWriter(
             archiveId = archiveId,
             artifacts = artifacts,
             selectionErrors = selectionErrors,
-            packageCount = packageCount
+            packageCount = packageCount,
+            shizukuApkFallbackAttempts = shizukuApkFallbackAttempts,
+            shizukuApkFallbackSuccesses = shizukuApkFallbackSuccesses
         )
     }
 

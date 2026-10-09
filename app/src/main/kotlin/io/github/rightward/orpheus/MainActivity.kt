@@ -121,29 +121,26 @@ class MainActivity : Activity() {
             }
 
             shizukuProbeService = remote
-            executor.submit {
-                val result = runCatching { remote.collectReadOnlyDiagnostics() }
-                runOnUiThread {
-                    if (!isDestroyed) {
-                        completeShizukuProbe(
-                            rawResult = result.getOrNull(),
-                            failure = result.exceptionOrNull()
-                        )
-                    }
-                }
-            }
+            runShizukuProbe(remote)
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             shizukuProbeService = null
-            if (shizukuProbeInProgress) {
-                runOnUiThread {
-                    if (!isDestroyed) {
-                        completeShizukuProbe(
-                            rawResult = null,
-                            failure = IllegalStateException("Shizuku probe service disconnected.")
-                        )
-                    }
+            shizukuServiceBound = false
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                if (shizukuProbeInProgress) {
+                    completeShizukuProbe(
+                        rawResult = null,
+                        failure = IllegalStateException("Shizuku probe service disconnected.")
+                    )
+                } else {
+                    shizukuBackendStatus = shizukuBackendStatus.copy(
+                        probeOutcome = ShizukuProbeOutcome.FAILED,
+                        probeSummary = null,
+                        probeFailure = "The Shizuku UserService disconnected."
+                    )
+                    render()
                 }
             }
         }
@@ -325,7 +322,7 @@ class MainActivity : Activity() {
             )
 
             addBody(
-                "Adds obtainable base and split APK files to the archive.",
+                "Adds obtainable base and split APK files to the archive. If normal app access fails after the Shizuku probe succeeds, Orpheus may use a read-only fallback for PackageManager-reported APK paths under /data/app.",
                 primary = false
             )
 
@@ -574,7 +571,14 @@ class MainActivity : Activity() {
                 ShizukuProbeOutcome.NOT_RUN
             },
             probeSummary = if (preserveProbe) previous.probeSummary else null,
-            probeFailure = if (preserveProbe) previous.probeFailure else null
+            probeFailure = if (preserveProbe) previous.probeFailure else null,
+            apkFallbackOutcome = if (preserveProbe) {
+                previous.apkFallbackOutcome
+            } else {
+                ShizukuApkFallbackOutcome.NOT_RUN
+            },
+            apkFallbackSummary = if (preserveProbe) previous.apkFallbackSummary else null,
+            apkFallbackFailure = if (preserveProbe) previous.apkFallbackFailure else null
         )
     }
 
@@ -604,7 +608,8 @@ class MainActivity : Activity() {
             shizukuBackendStatus.backendDetail(),
             uidDetail,
             pendingDetail,
-            shizukuBackendStatus.diagnosticsDetail()
+            shizukuBackendStatus.diagnosticsDetail(),
+            shizukuBackendStatus.apkFallbackDetail()
         ).joinToString("\n")
     }
 
@@ -711,6 +716,12 @@ class MainActivity : Activity() {
         )
         render()
 
+        val existingService = shizukuProbeService
+        if (shizukuServiceBound && existingService != null) {
+            runShizukuProbe(existingService)
+            return
+        }
+
         try {
             shizukuServiceBound = true
             Shizuku.bindUserService(
@@ -723,6 +734,20 @@ class MainActivity : Activity() {
                 rawResult = null,
                 failure = error
             )
+        }
+    }
+
+    private fun runShizukuProbe(remote: IShizukuProbeService) {
+        executor.submit {
+            val result = runCatching { remote.collectReadOnlyDiagnostics() }
+            runOnUiThread {
+                if (!isDestroyed) {
+                    completeShizukuProbe(
+                        rawResult = result.getOrNull(),
+                        failure = result.exceptionOrNull()
+                    )
+                }
+            }
         }
     }
 
@@ -791,7 +816,9 @@ class MainActivity : Activity() {
             )
         }
 
-        stopShizukuProbeService()
+        if (shizukuBackendStatus.probeOutcome == ShizukuProbeOutcome.FAILED) {
+            stopShizukuProbeService()
+        }
         render()
         if (shizukuBackendStatus.probeOutcome == ShizukuProbeOutcome.FAILED) {
             setStatus(
@@ -1314,6 +1341,15 @@ class MainActivity : Activity() {
             null
         }
         val capabilitySnapshot = CapabilityScanner(shizukuBackendStatus).scan()
+        val shizukuApkReader = if (
+            shizukuBackendStatus.diagnosticsAvailability() ==
+                CapabilityAvailability.AVAILABLE &&
+            shizukuServiceBound
+        ) {
+            shizukuProbeService?.let(::ShizukuPackageApkReader)
+        } else {
+            null
+        }
         sessionStore.markRunning(outputUri.toString())
 
         render()
@@ -1357,13 +1393,14 @@ class MainActivity : Activity() {
                     }
                 }
 
-                writer.write(
+                val writeResult = writer.write(
                     outputUri = outputUri,
                     selectedTrees = roots,
                     includePackages = preservePackages,
                     includePackageApks = preservePackageApks,
                     selectedPackageNames = packageNames,
-                    listener = progress
+                    listener = progress,
+                    shizukuApkReader = shizukuApkReader
                 )
 
                 val verification = ArchiveVerifier(contentResolver)
@@ -1374,6 +1411,7 @@ class MainActivity : Activity() {
                         verification.error ?: "Archive verification failed."
                     )
                     runOnUiThread {
+                        updateShizukuApkFallbackStatus(writeResult)
                         render()
                         setStatus(
                             "Archive created, but verification failed.",
@@ -1386,13 +1424,23 @@ class MainActivity : Activity() {
                 sessionStore.markVerified()
 
                 runOnUiThread {
+                    updateShizukuApkFallbackStatus(writeResult)
                     render()
+                    val fallbackSummary =
+                        if (writeResult.shizukuApkFallbackAttempts > 0) {
+                            " Shizuku APK fallback: " +
+                                writeResult.shizukuApkFallbackSuccesses + "/" +
+                                writeResult.shizukuApkFallbackAttempts +
+                                " attempted source(s) collected."
+                        } else {
+                            ""
+                        }
                     setStatus(
                         "Backup verified: " +
                             verification.artifactCount +
                             " artifacts, " +
                             formatBytes(verification.verifiedBytes) +
-                            " checked.",
+                            " checked." + fallbackSummary,
                         if (verification.failedArtifacts == 0) {
                             successColor
                         } else {
@@ -1414,6 +1462,31 @@ class MainActivity : Activity() {
                 }
             }
         }
+    }
+
+    private fun updateShizukuApkFallbackStatus(result: BackupWriteResult) {
+        if (result.shizukuApkFallbackAttempts <= 0) return
+
+        val successes = result.shizukuApkFallbackSuccesses
+        shizukuBackendStatus = shizukuBackendStatus.copy(
+            apkFallbackOutcome = if (successes > 0) {
+                ShizukuApkFallbackOutcome.SUCCEEDED
+            } else {
+                ShizukuApkFallbackOutcome.FAILED
+            },
+            apkFallbackSummary = if (successes > 0) {
+                "Shizuku read " + successes + " of " +
+                    result.shizukuApkFallbackAttempts +
+                    " APK source(s) that the normal app process could not open."
+            } else {
+                null
+            },
+            apkFallbackFailure = if (successes == 0) {
+                "No inaccessible APK source could be opened through Shizuku."
+            } else {
+                null
+            }
+        )
     }
 
     private fun verifyLastArchive(outputUri: String) {

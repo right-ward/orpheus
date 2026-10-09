@@ -22,7 +22,15 @@ The first privileged operation is a short, read-only diagnostics probe in an iso
 
 The process uses fixed argument arrays (no shell-string interpolation), bounded command waits, and explicit errors for timeout, command failure, missing output, permission denial, or service disconnection. Orpheus verifies that the UserService's UID matches the UID reported by Shizuku before considering the probe successful. The service is unbound and stopped after use.
 
-The probe does not change device state, expose arbitrary command execution, read private application data, or prove that unrelated shell operations are permitted. Actual capabilities remain operation-specific and must be checked by each future collector.
+The probe does not change device state, expose arbitrary command execution, read private application data, or prove that unrelated shell operations are permitted. Actual capabilities remain operation-specific and must be checked by each collector.
+
+## APK read fallback
+
+After a successful probe, package preservation can supply a Shizuku-backed reader to the existing APK archiver. The app first tries to open each PackageManager-reported base/split APK in its own process. Only when that fails does it request a read-only file descriptor from the UserService.
+
+The UserService canonicalizes the requested path and only opens regular files contained below `/data/app/`. This matches ordinary user applications and updated system apps stored in the standard app-install directory. Other locations, including adopted-storage app paths, are not allowed by this initial fallback. The archive continues streaming bytes directly into the ZIP writer and records the actual size, SHA-256, source provider, and per-APK result. The fallback never accepts shell command text or paths outside the allow-list.
+
+APK access is tested per source path. A successful read does not mean every APK is accessible, does not include unchanged system APKs, and does not grant access to private application data. The aggregate APK-preservation capability remains limited; the Shizuku fallback capability changes from not tested to available only after at least one fallback read succeeds. Failed fallback attempts remain explicit failed artifacts.
 
 ## Capability states
 

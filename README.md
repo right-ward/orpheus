@@ -6,7 +6,7 @@ Orpheus is an Android-first preservation and migration tool. It does not try to 
 
 ## Current status
 
-Phase 4 — Shizuku integration (initial backend foundation).
+Phase 4 — Shizuku integration (initial APK read fallback).
 
 The current app:
 
@@ -22,11 +22,13 @@ The current app:
 - lets the user separately enable package metadata preservation and APK content preservation
 - lets the user preserve all visible packages or only an explicitly selected package set
 - preserves obtainable base APKs and split APKs with per-artifact checksums when APK preservation is enabled
+- uses Shizuku as a read-only fallback for PackageManager-reported APK paths under /data/app when normal app access fails and the probe has passed
 - reports packages whose APKs are unavailable or fail to read instead of hiding them
 - detects a connected Shizuku/Sui service and records its reported server UID as shell/ADB, root, or unknown
 - requests Shizuku authorization before running privileged operations
 - runs a read-only `id`/`getprop` probe in an isolated Shizuku UserService and reports failures explicitly
-- keeps broader privilege-dependent preservation collectors and cross-device testing unfinished
+- can read PackageManager-reported APK files through a validated Shizuku file descriptor when normal app access fails
+- keeps deeper protected-data collectors and cross-device testing unfinished
 - performs no restore or destructive operation
 
 Minimum Android API: 26 (Android 8.0 / Oreo).
