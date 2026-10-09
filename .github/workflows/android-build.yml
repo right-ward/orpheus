@@ -132,7 +132,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" || "$ACTION" == "release" ]]; then
             expected_version="${artifact_ref#v}"
             if [[ "$version_name" != "$expected_version" ]]; then
-              echo "Tag $artifact_ref does not match app versionName $version_name from source ref $source_ref."
+              echo "Tag $artifact_ref does not match app versionName $version_name from source ref $source_branch."
               exit 1
             fi
           fi
