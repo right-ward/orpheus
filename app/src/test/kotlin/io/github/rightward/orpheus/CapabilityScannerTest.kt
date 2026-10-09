@@ -89,5 +89,9 @@ class CapabilityScannerTest {
             CapabilityAvailability.AVAILABLE,
             afterFallback.forId(CapabilityId.SHIZUKU_PACKAGE_APK_FALLBACK)?.availability
         )
+        assertEquals(
+            CapabilityAvailability.NOT_TESTED,
+            afterFallback.forId(CapabilityId.SHIZUKU_SYSTEM_SETTINGS_SNAPSHOT)?.availability
+        )
     }
 }
