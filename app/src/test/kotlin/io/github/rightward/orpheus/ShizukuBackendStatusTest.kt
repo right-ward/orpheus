@@ -21,6 +21,19 @@ class ShizukuBackendStatusTest {
     }
 
     @Test
+    fun unknownPrivilegeDoesNotClaimTheBackendIsFullyAvailable() {
+        val status = ShizukuBackendStatus(
+            binderConnected = true,
+            serverApiSupported = true,
+            permissionGranted = true,
+            serverUid = 10000
+        )
+
+        assertEquals(CapabilityAvailability.LIMITED, status.backendAvailability())
+        assertEquals(CapabilityAvailability.NOT_TESTED, status.diagnosticsAvailability())
+    }
+
+    @Test
     fun authorizationIsRequiredBeforeTheBackendIsAvailable() {
         val status = ShizukuBackendStatus(
             binderConnected = true,
