@@ -36,6 +36,7 @@ data class ShizukuBackendStatus(
         !binderConnected -> CapabilityAvailability.NOT_TESTED
         !serverApiSupported -> CapabilityAvailability.UNAVAILABLE
         !permissionGranted -> CapabilityAvailability.LIMITED
+        privilege == ShizukuPrivilege.UNKNOWN -> CapabilityAvailability.LIMITED
         else -> CapabilityAvailability.AVAILABLE
     }
 
