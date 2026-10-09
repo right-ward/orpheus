@@ -105,18 +105,19 @@ jobs:
         run: |
           set -euo pipefail
 
+          metadata_file="app/build.gradle.kts"
           source_ref="${SOURCE:-$GITHUB_REF}"
           artifact_ref="${SOURCE:-$GITHUB_REF_NAME}"
-          metadata_file="app/build.gradle.kts"
 
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             source_ref="$GITHUB_REF"
             artifact_ref="$GITHUB_REF_NAME"
           elif [[ "$ACTION" == "release" ]]; then
-            source_ref="$RELEASE_TAG"
+            # Rebuild the existing release from the selected source branch.
+            # The tag is the release identity and must be an ancestor of this source;
+            # the branch may contain fixes while keeping the same app version.
+            source_ref="${SOURCE:-$GITHUB_REF}"
             artifact_ref="$RELEASE_TAG"
-            metadata_file="$RUNNER_TEMP/release-build.gradle.kts"
-            git show "$RELEASE_TAG:app/build.gradle.kts" > "$metadata_file"
           fi
 
           version_name="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"/\1/p' "$metadata_file" | head -n1)"
@@ -130,7 +131,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" || "$ACTION" == "release" ]]; then
             expected_version="${artifact_ref#v}"
             if [[ "$version_name" != "$expected_version" ]]; then
-              echo "Tag $artifact_ref does not match app versionName $version_name."
+              echo "Tag $artifact_ref does not match app versionName $version_name from source ref $source_ref."
               exit 1
             fi
           fi
