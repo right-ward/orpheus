@@ -32,6 +32,9 @@ object ShizukuSystemSettingsCollector {
         )
     )
 
+    fun isValidScalarValue(value: String): Boolean =
+        value.length <= MAX_SETTING_VALUE_LENGTH && NUMERIC_SETTING_VALUE.matches(value)
+
     data class Snapshot(
         val json: String,
         val readableCount: Int,
@@ -78,11 +81,8 @@ object ShizukuSystemSettingsCollector {
                             "Settings response contained a value without a value field."
                         }
                         val value = supplied.getString("value")
-                        require(value.length <= MAX_SETTING_VALUE_LENGTH) {
-                            "Settings value exceeded the allowed size."
-                        }
-                        require(!value.contains('\u0000')) {
-                            "Settings value contained an invalid character."
+                        require(isValidScalarValue(value)) {
+                            "Settings value did not match the expected numeric format."
                         }
 
                         normalizedNamespace.put(
@@ -141,4 +141,5 @@ object ShizukuSystemSettingsCollector {
     }
 
     private const val MAX_SETTING_VALUE_LENGTH = 4096
+    private val NUMERIC_SETTING_VALUE = Regex("""-?\d+(?:\.\d+)?""")
 }
