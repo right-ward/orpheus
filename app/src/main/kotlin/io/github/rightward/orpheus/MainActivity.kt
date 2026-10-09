@@ -136,13 +136,14 @@ class MainActivity : Activity() {
 
         override fun onServiceDisconnected(name: ComponentName?) {
             shizukuProbeService = null
-            shizukuServiceBound = false
             if (shizukuProbeInProgress) {
                 runOnUiThread {
-                    completeShizukuProbe(
-                        rawResult = null,
-                        failure = IllegalStateException("Shizuku probe service disconnected.")
-                    )
+                    if (!isDestroyed) {
+                        completeShizukuProbe(
+                            rawResult = null,
+                            failure = IllegalStateException("Shizuku probe service disconnected.")
+                        )
+                    }
                 }
             }
         }
@@ -204,6 +205,8 @@ class MainActivity : Activity() {
         Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
         Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
         Shizuku.removeRequestPermissionResultListener(shizukuPermissionResultListener)
+        shizukuPermissionRequestPending = false
+        shizukuProbeInProgress = false
         stopShizukuProbeService()
         executor.shutdownNow()
         super.onDestroy()
@@ -727,6 +730,7 @@ class MainActivity : Activity() {
         rawResult: String?,
         failure: Throwable?
     ) {
+        if (!shizukuProbeInProgress || isDestroyed) return
         shizukuProbeInProgress = false
 
         if (!runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
