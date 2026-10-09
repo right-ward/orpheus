@@ -82,13 +82,14 @@ Exit condition: Orpheus can produce a verified description of the application in
 
 Goal: make Android-only operation substantially more capable.
 
-- [ ] Detect Shizuku
-- [ ] Detect Shizuku backend privilege level
-- [ ] Request/check required permissions
-- [ ] Implement isolated Shizuku operations
-- [ ] Add shell-backed collectors
-- [ ] Record backend-specific capabilities
-- [ ] Test across multiple Android versions where possible
+- [x] Detect Shizuku/Sui binder availability and track binder death/reconnection
+- [x] Detect reported Shizuku server UID as shell/ADB, root, or unknown
+- [x] Request/check Shizuku authorization before backend calls
+- [x] Implement an isolated Shizuku UserService with explicit cleanup
+- [x] Add an initial read-only shell diagnostics probe using allow-listed `id` and `getprop` commands
+- [x] Record backend-specific capability states and gate diagnostic availability on a successful probe
+- [ ] Add preservation-domain-specific shell-backed collectors
+- [ ] Test across multiple Android versions and actual Shizuku/Sui configurations where possible
 
 Exit condition: all operations using Shizuku are capability-gated and degrade cleanly when Shizuku is absent or insufficiently privileged.
 
