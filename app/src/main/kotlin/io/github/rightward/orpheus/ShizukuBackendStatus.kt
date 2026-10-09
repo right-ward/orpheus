@@ -20,6 +20,12 @@ enum class ShizukuProbeOutcome {
     FAILED
 }
 
+enum class ShizukuApkFallbackOutcome {
+    NOT_RUN,
+    SUCCEEDED,
+    FAILED
+}
+
 data class ShizukuBackendStatus(
     val binderConnected: Boolean = false,
     val serverApiSupported: Boolean = false,
@@ -27,7 +33,10 @@ data class ShizukuBackendStatus(
     val serverUid: Int? = null,
     val probeOutcome: ShizukuProbeOutcome = ShizukuProbeOutcome.NOT_RUN,
     val probeSummary: String? = null,
-    val probeFailure: String? = null
+    val probeFailure: String? = null,
+    val apkFallbackOutcome: ShizukuApkFallbackOutcome = ShizukuApkFallbackOutcome.NOT_RUN,
+    val apkFallbackSummary: String? = null,
+    val apkFallbackFailure: String? = null
 ) {
     val privilege: ShizukuPrivilege
         get() = ShizukuPrivilegeClassifier.classify(serverUid)
@@ -47,6 +56,20 @@ data class ShizukuBackendStatus(
         probeOutcome == ShizukuProbeOutcome.SUCCEEDED ->
             CapabilityAvailability.AVAILABLE
         probeOutcome == ShizukuProbeOutcome.FAILED ->
+            CapabilityAvailability.LIMITED
+        else -> CapabilityAvailability.NOT_TESTED
+    }
+
+    fun apkFallbackAvailability(): CapabilityAvailability = when {
+        !binderConnected -> CapabilityAvailability.NOT_TESTED
+        !serverApiSupported -> CapabilityAvailability.UNAVAILABLE
+        !permissionGranted -> CapabilityAvailability.LIMITED
+        privilege == ShizukuPrivilege.UNKNOWN -> CapabilityAvailability.LIMITED
+        probeOutcome == ShizukuProbeOutcome.FAILED -> CapabilityAvailability.LIMITED
+        probeOutcome != ShizukuProbeOutcome.SUCCEEDED -> CapabilityAvailability.NOT_TESTED
+        apkFallbackOutcome == ShizukuApkFallbackOutcome.SUCCEEDED ->
+            CapabilityAvailability.AVAILABLE
+        apkFallbackOutcome == ShizukuApkFallbackOutcome.FAILED ->
             CapabilityAvailability.LIMITED
         else -> CapabilityAvailability.NOT_TESTED
     }
@@ -78,6 +101,29 @@ data class ShizukuBackendStatus(
             "The read-only probe failed: " + (probeFailure ?: "unknown error")
         else ->
             "Authorization is ready. Run the read-only probe to verify the isolated UserService path."
+    }
+
+    fun apkFallbackDetail(): String = when {
+        !binderConnected ->
+            "Shizuku APK fallback has not been tested because the service is not connected."
+        !serverApiSupported ->
+            "Shizuku APK fallback requires UserService support (server API v11 or later)."
+        !permissionGranted ->
+            "Grant Orpheus Shizuku permission before APK fallback can be attempted."
+        privilege == ShizukuPrivilege.UNKNOWN ->
+            "APK fallback is blocked because the Shizuku server UID is unknown."
+        probeOutcome == ShizukuProbeOutcome.FAILED ->
+            "APK fallback is blocked because the read-only UserService probe failed."
+        probeOutcome != ShizukuProbeOutcome.SUCCEEDED ->
+            "APK fallback has not been tested. Run the read-only probe first."
+        apkFallbackOutcome == ShizukuApkFallbackOutcome.SUCCEEDED ->
+            apkFallbackSummary
+                ?: "Shizuku successfully read at least one APK that the normal app process could not open."
+        apkFallbackOutcome == ShizukuApkFallbackOutcome.FAILED ->
+            "Shizuku APK fallback was attempted but could not read an APK: " +
+                (apkFallbackFailure ?: "unknown error")
+        else ->
+            "After the probe succeeds, inaccessible PackageManager-reported APK paths under /data/app may be tried through a read-only Shizuku file descriptor."
     }
 
     fun summary(

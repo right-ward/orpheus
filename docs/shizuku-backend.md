@@ -20,7 +20,7 @@ The first privileged operation is a short, read-only diagnostics probe in an iso
 - `/system/bin/getprop ro.build.version.sdk`
 - `/system/bin/getprop ro.build.version.release`
 
-The process uses fixed argument arrays (no shell-string interpolation), bounded command waits, and explicit errors for timeout, command failure, missing output, permission denial, or service disconnection. Orpheus verifies that the UserService's UID matches the UID reported by Shizuku before considering the probe successful. The service is unbound and stopped after use.
+The process uses fixed argument arrays (no shell-string interpolation), bounded command waits, and explicit errors for timeout, command failure, missing output, permission denial, or service disconnection. Orpheus verifies that the UserService's UID matches the UID reported by Shizuku before considering the probe successful. After a successful probe, the service remains bound for the activity lifecycle so package preservation can use the narrow APK reader; it is unbound and stopped on activity destruction, probe failure, or service disconnection.
 
 The probe does not change device state, expose arbitrary command execution, read private application data, or prove that unrelated shell operations are permitted. Actual capabilities remain operation-specific and must be checked by each collector.
 
@@ -31,6 +31,8 @@ After a successful probe, package preservation can supply a Shizuku-backed reade
 The UserService canonicalizes the requested path and only opens regular files contained below `/data/app/`. This matches ordinary user applications and updated system apps stored in the standard app-install directory. Other locations, including adopted-storage app paths, are not allowed by this initial fallback. The archive continues streaming bytes directly into the ZIP writer and records the actual size, SHA-256, source provider, and per-APK result. The fallback never accepts shell command text or paths outside the allow-list.
 
 APK access is tested per source path. A successful read does not mean every APK is accessible, does not include unchanged system APKs, and does not grant access to private application data. The aggregate APK-preservation capability remains limited; the Shizuku fallback capability changes from not tested to available only after at least one fallback read succeeds. Failed fallback attempts remain explicit failed artifacts.
+
+The service exposes one additional operation: open a read-only file descriptor for a canonical regular APK file under `/data/app/`. Paths outside this root are rejected; the interface does not accept shell commands or expose arbitrary file reads.
 
 ## Capability states
 
@@ -43,4 +45,4 @@ APK access is tested per source path. A successful read does not mean every APK 
 
 ## Known limitations
 
-This implementation establishes the detection, permission, privilege classification, and isolated read-only probe path. It does not yet contain preservation-domain-specific shell collectors or a multi-device test matrix. Those remain open Phase 4 work.
+This implementation establishes the detection, permission, privilege classification, an isolated read-only diagnostics probe, and an APK-read fallback. Further preservation-domain-specific collectors and a multi-device test matrix remain open Phase 4 work.
