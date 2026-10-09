@@ -43,7 +43,7 @@ class CapabilityScanner(
                     id = CapabilityId.PACKAGE_APK_PRESERVATION,
                     provider = normal,
                     availability = CapabilityAvailability.LIMITED,
-                    detail = "APK preservation is limited to base and split APK files readable by the normal app process."
+                    detail = "APK preservation targets base and split APKs; inaccessible paths may use the separately capability-gated Shizuku fallback under /data/app/."
                 ),
                 Capability(
                     id = CapabilityId.SHIZUKU_BACKEND,
