@@ -52,9 +52,10 @@ class ShizukuProbeService @Keep constructor() : IShizukuProbeService.Stub() {
                         .put("error_code", "SETTING_READ_FAILED")
                     value == null -> JSONObject()
                         .put("status", "not_set")
-                    value.length > MAX_SETTING_VALUE_LENGTH -> JSONObject()
-                        .put("status", "failed")
-                        .put("error_code", "SETTING_READ_FAILED")
+                    !ShizukuSystemSettingsCollector.isValidScalarValue(value) ->
+                        JSONObject()
+                            .put("status", "failed")
+                            .put("error_code", "SETTING_READ_FAILED")
                     else -> JSONObject()
                         .put("status", "available")
                         .put("value", value)
@@ -168,6 +169,5 @@ class ShizukuProbeService @Keep constructor() : IShizukuProbeService.Stub() {
         const val APK_SOURCE_ROOT = "/data/app"
         const val COMMAND_TIMEOUT_SECONDS = 5L
         const val OUTPUT_DRAIN_TIMEOUT_MILLIS = 500L
-        const val MAX_SETTING_VALUE_LENGTH = 4096
     }
 }
