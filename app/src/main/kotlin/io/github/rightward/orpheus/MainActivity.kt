@@ -126,15 +126,18 @@ class MainActivity : Activity() {
 
         override fun onServiceDisconnected(name: ComponentName?) {
             shizukuProbeService = null
-            shizukuServiceBound = false
             runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
+                if (isDestroyed) {
+                    stopShizukuProbeService()
+                    return@runOnUiThread
+                }
                 if (shizukuProbeInProgress) {
                     completeShizukuProbe(
                         rawResult = null,
                         failure = IllegalStateException("Shizuku probe service disconnected.")
                     )
                 } else {
+                    stopShizukuProbeService()
                     shizukuBackendStatus = shizukuBackendStatus.copy(
                         probeOutcome = ShizukuProbeOutcome.FAILED,
                         probeSummary = null,
