@@ -1018,20 +1018,19 @@ class MainActivity : Activity() {
             it.packageName in workingSelection
         }.toBooleanArray()
 
-        val packageList = android.widget.ListView(this).apply {
-            choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
-            adapter = android.widget.ArrayAdapter(
-                this@MainActivity,
-                android.R.layout.simple_list_item_multiple_choice,
-                labels
-            )
-            setOnItemClickListener { _, _, position, _ ->
-                val packageName = packages[position].packageName
-                if (packageList.isItemChecked(position)) {
-                    workingSelection += packageName
-                } else {
-                    workingSelection -= packageName
-                }
+        val packageList = android.widget.ListView(this)
+        packageList.choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
+        packageList.adapter = android.widget.ArrayAdapter(
+            this,
+            android.R.layout.simple_list_item_multiple_choice,
+            labels
+        )
+        packageList.setOnItemClickListener { _, _, position, _ ->
+            val packageName = packages[position].packageName
+            if (packageList.isItemChecked(position)) {
+                workingSelection += packageName
+            } else {
+                workingSelection -= packageName
             }
         }
 
