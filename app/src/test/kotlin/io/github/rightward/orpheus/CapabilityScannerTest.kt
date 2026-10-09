@@ -20,6 +20,10 @@ class CapabilityScannerTest {
             CapabilityAvailability.NOT_TESTED,
             snapshot.forId(CapabilityId.SHIZUKU_PACKAGE_APK_FALLBACK)?.availability
         )
+        assertEquals(
+            CapabilityAvailability.NOT_TESTED,
+            snapshot.forId(CapabilityId.SHIZUKU_SYSTEM_SETTINGS_SNAPSHOT)?.availability
+        )
     }
 
     @Test
@@ -65,6 +69,10 @@ class CapabilityScannerTest {
         assertEquals(
             CapabilityAvailability.NOT_TESTED,
             snapshot.forId(CapabilityId.SHIZUKU_PACKAGE_APK_FALLBACK)?.availability
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_TESTED,
+            snapshot.forId(CapabilityId.SHIZUKU_SYSTEM_SETTINGS_SNAPSHOT)?.availability
         )
         assertNotNull(snapshot.forId(CapabilityId.PACKAGE_INVENTORY))
 
