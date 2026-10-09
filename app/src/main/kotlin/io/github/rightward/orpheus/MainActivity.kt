@@ -690,11 +690,11 @@ class MainActivity : Activity() {
         }
 
         if (shizukuBackendStatus.privilege == ShizukuPrivilege.UNKNOWN) {
+            render()
             setStatus(
                 "Shizuku's privilege level is unknown. Orpheus will not start the probe until UID 0 (root) or UID 2000 (shell/ADB) is reported.",
                 warningColor
             )
-            render()
             return
         }
 
