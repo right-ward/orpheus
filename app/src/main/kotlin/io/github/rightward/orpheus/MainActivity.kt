@@ -609,6 +609,8 @@ class MainActivity : Activity() {
         !shizukuBackendStatus.binderConnected -> "Refresh Shizuku status"
         !shizukuBackendStatus.serverApiSupported -> "Shizuku API unsupported"
         !shizukuBackendStatus.permissionGranted -> "Grant Shizuku access"
+        shizukuBackendStatus.privilege == ShizukuPrivilege.UNKNOWN ->
+            "Privilege level unknown"
         else -> "Run read-only probe"
     }
 
