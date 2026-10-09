@@ -24,6 +24,7 @@ enum class CapabilityId(
     PACKAGE_INVENTORY("Package inventory"),
     PACKAGE_APK_PRESERVATION("Package APK preservation"),
     SHIZUKU_BACKEND("Shizuku backend"),
+    SHIZUKU_READ_ONLY_DIAGNOSTICS("Shizuku read-only diagnostics"),
     ROOT_BACKEND("Root backend")
 }
 
