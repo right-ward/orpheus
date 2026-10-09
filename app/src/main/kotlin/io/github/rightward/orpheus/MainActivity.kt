@@ -1027,7 +1027,7 @@ class MainActivity : Activity() {
             )
             setOnItemClickListener { _, _, position, _ ->
                 val packageName = packages[position].packageName
-                if (isItemChecked(position)) {
+                if (packageList.isItemChecked(position)) {
                     workingSelection += packageName
                 } else {
                     workingSelection -= packageName
