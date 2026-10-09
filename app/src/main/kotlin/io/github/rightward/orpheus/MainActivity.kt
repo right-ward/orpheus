@@ -1018,7 +1018,22 @@ class MainActivity : Activity() {
             it.packageName in workingSelection
         }.toBooleanArray()
 
-        lateinit var dialog: AlertDialog
+        val packageList = android.widget.ListView(this).apply {
+            choiceMode = android.widget.ListView.CHOICE_MODE_MULTIPLE
+            adapter = android.widget.ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_list_item_multiple_choice,
+                labels
+            )
+            setOnItemClickListener { _, _, position, _ ->
+                val packageName = packages[position].packageName
+                if (isItemChecked(position)) {
+                    workingSelection += packageName
+                } else {
+                    workingSelection -= packageName
+                }
+            }
+        }
 
         fun setAllPackagesChecked(isChecked: Boolean) {
             workingSelection.clear()
@@ -1026,68 +1041,52 @@ class MainActivity : Activity() {
                 workingSelection.addAll(packages.map { it.packageName })
             }
             packages.indices.forEach { index ->
-                dialog.listView.setItemChecked(index, isChecked)
+                packageList.setItemChecked(index, isChecked)
             }
         }
 
-        val titleContainer = LinearLayout(this).apply {
+        val selectionActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            addView(
+                makeSecondaryButton("Select all") {
+                    setAllPackagesChecked(true)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            addView(
+                makeSecondaryButton("Select none") {
+                    setAllPackagesChecked(false)
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+        }
+
+        val listHeightPx = (resources.displayMetrics.heightPixels * 0.52f)
+            .roundToInt()
+            .coerceAtLeast(dp(280))
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(16), dp(16), dp(4))
-
+            setPadding(dp(12), 0, dp(12), 0)
             addView(
-                TextView(this@MainActivity).apply {
-                    text = "Select packages"
-                    textSize = 20f
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                }
+                selectionActions,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
             )
-
             addView(
-                LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.END
-
-                    addView(
-                        TextView(this@MainActivity).apply {
-                            text = "Select all"
-                            textSize = 14f
-                            gravity = Gravity.CENTER
-                            isClickable = true
-                            isFocusable = true
-                            setPadding(dp(12), dp(12), dp(12), dp(12))
-                            setOnClickListener {
-                                setAllPackagesChecked(true)
-                            }
-                        }
-                    )
-
-                    addView(
-                        TextView(this@MainActivity).apply {
-                            text = "Select none"
-                            textSize = 14f
-                            gravity = Gravity.CENTER
-                            isClickable = true
-                            isFocusable = true
-                            setPadding(dp(12), dp(12), dp(8), dp(12))
-                            setOnClickListener {
-                                setAllPackagesChecked(false)
-                            }
-                        }
-                    )
-                }
+                packageList,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    listHeightPx
+                )
             )
         }
 
-        dialog = AlertDialog.Builder(this)
-            .setCustomTitle(titleContainer)
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                val packageName = packages[which].packageName
-                if (isChecked) {
-                    workingSelection += packageName
-                } else {
-                    workingSelection -= packageName
-                }
-            }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Select packages")
+            .setView(content)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Done") { _, _ ->
                 selectedPackageNames.clear()
@@ -1097,6 +1096,9 @@ class MainActivity : Activity() {
             .create()
 
         dialog.show()
+        packages.indices.forEach { index ->
+            packageList.setItemChecked(index, checked[index])
+        }
     }
 
     private fun makeHeader(title: String, subtitle: String): View {
