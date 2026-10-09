@@ -272,6 +272,10 @@ Limitations:
 - some private application data remains inaccessible
 - non-rooted Shizuku generally needs to be restarted after reboot
 
+Orpheus integrates through the published Shizuku API and provider. Runtime status is derived from the live binder, server version support, the app's own Shizuku permission, the reported server UID, and the result of an isolated read-only probe. UID 2000 is treated as shell/ADB and UID 0 as root; every other or unavailable UID remains unknown rather than being guessed.
+
+The initial UserService probe only runs fixed read-only commands (`id` and selected `getprop` keys), uses bounded waits, and is stopped after use. It does not expose arbitrary command execution or private application-data extraction. A successful probe validates only this narrow diagnostics path; it does not establish that other collectors or protected operations are available. See [shizuku-backend.md](shizuku-backend.md).
+
 References:
 - https://github.com/RikkaApps/Shizuku
 - https://github.com/RikkaApps/Shizuku-API
