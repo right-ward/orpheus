@@ -26,6 +26,13 @@ enum class ShizukuApkFallbackOutcome {
     FAILED
 }
 
+enum class ShizukuSettingsSnapshotOutcome {
+    NOT_RUN,
+    SUCCEEDED,
+    PARTIAL,
+    FAILED
+}
+
 data class ShizukuBackendStatus(
     val binderConnected: Boolean = false,
     val serverApiSupported: Boolean = false,
@@ -36,7 +43,11 @@ data class ShizukuBackendStatus(
     val probeFailure: String? = null,
     val apkFallbackOutcome: ShizukuApkFallbackOutcome = ShizukuApkFallbackOutcome.NOT_RUN,
     val apkFallbackSummary: String? = null,
-    val apkFallbackFailure: String? = null
+    val apkFallbackFailure: String? = null,
+    val settingsSnapshotOutcome: ShizukuSettingsSnapshotOutcome =
+        ShizukuSettingsSnapshotOutcome.NOT_RUN,
+    val settingsSnapshotSummary: String? = null,
+    val settingsSnapshotFailure: String? = null
 ) {
     val privilege: ShizukuPrivilege
         get() = ShizukuPrivilegeClassifier.classify(serverUid)
@@ -124,6 +135,48 @@ data class ShizukuBackendStatus(
                 (apkFallbackFailure ?: "unknown error")
         else ->
             "After the probe succeeds, inaccessible PackageManager-reported APK paths under /data/app may be tried through a read-only Shizuku file descriptor."
+    }
+
+    fun systemSettingsSnapshotAvailability(): CapabilityAvailability = when {
+        !binderConnected -> CapabilityAvailability.NOT_TESTED
+        !serverApiSupported -> CapabilityAvailability.UNAVAILABLE
+        !permissionGranted -> CapabilityAvailability.LIMITED
+        privilege == ShizukuPrivilege.UNKNOWN -> CapabilityAvailability.LIMITED
+        probeOutcome == ShizukuProbeOutcome.FAILED -> CapabilityAvailability.LIMITED
+        probeOutcome != ShizukuProbeOutcome.SUCCEEDED ->
+            CapabilityAvailability.NOT_TESTED
+        settingsSnapshotOutcome == ShizukuSettingsSnapshotOutcome.SUCCEEDED ->
+            CapabilityAvailability.AVAILABLE
+        settingsSnapshotOutcome == ShizukuSettingsSnapshotOutcome.PARTIAL ||
+            settingsSnapshotOutcome == ShizukuSettingsSnapshotOutcome.FAILED ->
+            CapabilityAvailability.LIMITED
+        else -> CapabilityAvailability.NOT_TESTED
+    }
+
+    fun systemSettingsSnapshotDetail(): String = when {
+        !binderConnected ->
+            "The allow-listed settings snapshot has not been tested because Shizuku/Sui is not connected."
+        !serverApiSupported ->
+            "The settings snapshot requires Shizuku UserService support (server API v11 or later)."
+        !permissionGranted ->
+            "Grant Orpheus Shizuku permission before collecting the allow-listed settings snapshot."
+        privilege == ShizukuPrivilege.UNKNOWN ->
+            "The settings snapshot is blocked because the Shizuku server UID is unknown."
+        probeOutcome == ShizukuProbeOutcome.FAILED ->
+            "The settings snapshot is blocked because the read-only UserService probe failed."
+        probeOutcome != ShizukuProbeOutcome.SUCCEEDED ->
+            "Run the read-only Shizuku probe before collecting allow-listed system settings."
+        settingsSnapshotOutcome == ShizukuSettingsSnapshotOutcome.SUCCEEDED ->
+            settingsSnapshotSummary
+                ?: "The allow-listed settings snapshot was collected."
+        settingsSnapshotOutcome == ShizukuSettingsSnapshotOutcome.PARTIAL ->
+            settingsSnapshotSummary
+                ?: "The settings snapshot was partial; one or more settings could not be read."
+        settingsSnapshotOutcome == ShizukuSettingsSnapshotOutcome.FAILED ->
+            "The settings snapshot failed: " +
+                (settingsSnapshotFailure ?: "unknown error")
+        else ->
+            "Not collected. The optional snapshot reads only a small allow-list of display and interaction preferences; it does not change or restore settings."
     }
 
     fun summary(

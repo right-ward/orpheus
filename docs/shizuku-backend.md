@@ -34,6 +34,21 @@ APK access is tested per source path. A successful read does not mean every APK 
 
 The service exposes one additional operation: open a read-only file descriptor for a canonical regular file with an `.apk` extension under `/data/app/`. Paths outside this root and non-APK files are rejected; the interface does not accept shell commands or expose arbitrary file reads. The UserService version is incremented when its interface changes so an older bound implementation is not reused.
 
+## Allow-listed system-settings snapshot
+
+The optional settings collector uses the existing UserService only after the read-only probe succeeds and Orpheus has a known shell/ADB or root UID. The UserService interface version is 3.
+
+The collector runs read-only `settings list system` and `settings list global` commands, filters the output in the service process, and returns only these fixed keys:
+
+- `system`: `font_scale`, `screen_off_timeout`, `screen_brightness`, `screen_brightness_mode`, `accelerometer_rotation`, `user_rotation`, `haptic_feedback_enabled`, `sound_effects_enabled`
+- `global`: `window_animation_scale`, `transition_animation_scale`, `animator_duration_scale`
+
+It does not archive the unfiltered command output. It excludes account identifiers, credentials, accessibility service names, input-method names, network settings, and ringtone URIs. Each allow-listed key is marked `available`, `not_set`, or `failed`; read failures use a stable error code instead of saving arbitrary command output.
+
+When selected by the user, the normalized snapshot is written to `data/system/settings.json`. Its artifact status remains `partial` because it represents a small allow-list rather than the device's full settings state, and the current application does not restore these values. If no setting can be read, an explicit failed artifact is recorded without a payload. This snapshot is not collected by default.
+
+The operation does not write settings, change device configuration, expose arbitrary shell commands, or broaden the APK file-descriptor allow-list.
+
 ## Capability states
 
 - Shizuku absent or stopped: backend is `not_tested`; no privileged operation is attempted.

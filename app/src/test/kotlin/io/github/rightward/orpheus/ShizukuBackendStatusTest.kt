@@ -97,6 +97,50 @@ class ShizukuBackendStatusTest {
     }
 
     @Test
+    fun settingsSnapshotCapabilityRequiresProbeAndReportsPartialCollection() {
+        val authorized = ShizukuBackendStatus(
+            binderConnected = true,
+            serverApiSupported = true,
+            permissionGranted = true,
+            serverUid = 2000
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_TESTED,
+            authorized.systemSettingsSnapshotAvailability()
+        )
+
+        val probed = authorized.copy(
+            probeOutcome = ShizukuProbeOutcome.SUCCEEDED,
+            probeSummary = "Probe passed."
+        )
+        assertEquals(
+            CapabilityAvailability.NOT_TESTED,
+            probed.systemSettingsSnapshotAvailability()
+        )
+        assertEquals(
+            CapabilityAvailability.AVAILABLE,
+            probed.copy(
+                settingsSnapshotOutcome = ShizukuSettingsSnapshotOutcome.SUCCEEDED,
+                settingsSnapshotSummary = "Snapshot collected."
+            ).systemSettingsSnapshotAvailability()
+        )
+        assertEquals(
+            CapabilityAvailability.LIMITED,
+            probed.copy(
+                settingsSnapshotOutcome = ShizukuSettingsSnapshotOutcome.PARTIAL,
+                settingsSnapshotFailure = "Some values failed."
+            ).systemSettingsSnapshotAvailability()
+        )
+        assertEquals(
+            CapabilityAvailability.LIMITED,
+            probed.copy(
+                settingsSnapshotOutcome = ShizukuSettingsSnapshotOutcome.FAILED,
+                settingsSnapshotFailure = "Read failed."
+            ).systemSettingsSnapshotAvailability()
+        )
+    }
+
+    @Test
     fun oldServerApiIsReportedAsUnsupported() {
         val status = ShizukuBackendStatus(
             binderConnected = true, serverApiSupported = false,

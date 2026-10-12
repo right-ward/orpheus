@@ -64,6 +64,12 @@ class CapabilityScanner(
                     detail = shizukuStatus.apkFallbackDetail()
                 ),
                 Capability(
+                    id = CapabilityId.SHIZUKU_SYSTEM_SETTINGS_SNAPSHOT,
+                    provider = shizuku,
+                    availability = shizukuStatus.systemSettingsSnapshotAvailability(),
+                    detail = shizukuStatus.systemSettingsSnapshotDetail()
+                ),
+                Capability(
                     id = CapabilityId.ROOT_BACKEND,
                     provider = CapabilityProvider.ROOT,
                     availability = CapabilityAvailability.NOT_IMPLEMENTED,

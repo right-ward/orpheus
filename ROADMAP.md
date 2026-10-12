@@ -89,6 +89,7 @@ Goal: make Android-only operation substantially more capable.
 - [x] Add an initial read-only shell diagnostics probe using allow-listed `id` and `getprop` commands
 - [x] Record backend-specific capability states and gate diagnostic availability on a successful probe
 - [x] Add a read-only Shizuku fallback for PackageManager-reported APK paths under `/data/app`
+- [x] Add an opt-in, allow-listed read-only system-settings snapshot with per-key read status and explicit partial coverage
 - [ ] Add further preservation-domain-specific shell-backed collectors
 - [ ] Test across multiple Android versions and actual Shizuku/Sui configurations where possible
 

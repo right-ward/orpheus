@@ -21,8 +21,8 @@ android {
         applicationId = "io.github.rightward.orpheus"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.5.1"
+        versionCode = 8
+        versionName = "0.6.0"
     }
 
     signingConfigs {
