@@ -1,0 +1,54 @@
+---
+layout: default
+title: Verdandi
+permalink: /
+description: "Give your game an evolving soundtrack: seed-driven procedural music with distinct styles, adaptive layers, and repeatable musical patterns."
+---
+
+<h1>A soundtrack that grows with your game.</h1>
+
+<p><strong>Verdandi</strong> is a procedural music engine for games. Give it a seed and a musical style, and it creates a layered track that can evolve while it plays—so your soundtrack can respond to the feeling of a moment without relying on a folder full of prerecorded loops.</p>
+
+<p>Use it to score a lonely journey, a tense encounter, a dramatic reveal, or a quiet moment of reflection. The musical patterns are seed-driven, so the same setup recreates the same evolving arrangement.</p>
+
+<p><a href="{{ '/docs/' | relative_url }}">Read the docs and integration guides</a> · <a href="https://github.com/right-ward/verdandi">Explore the source on GitHub</a></p>
+
+<h2>Four different musical identities</h2>
+
+<h3>Ethereal</h3>
+<p>Slow, spacious exploration music with sustained harmony, airy bowed-string-like tones, and bell-like accents. For discovery, distance, and places that feel larger than the player.</p>
+
+<h3>Warbound</h3>
+<p>Driving riffs, distorted-guitar-like tones, bass, and metal-oriented drums. A more direct, forceful sound for danger and momentum.</p>
+
+<h3>Orchestral</h3>
+<p>Heavy metal expanded with orchestral-string and choir-like layers, aiming for a grand, almost sacred scale.</p>
+
+<h3>Contemplative</h3>
+<p>Restrained, string-led music with a warm sustained bed, a darker melody, and a gentle repeating figure. Designed for reflection rather than constant escalation.</p>
+
+<h2>More than a repeating loop</h2>
+
+<h3>Familiar, but never frozen</h3>
+<p>Each track is built from a musical frame chosen by its seed: key, mode, tempo, and chord progression. Across four-bar phrases, individual layers can repeat, mutate slightly, or develop a new pattern. The result keeps a recognizable identity while continuing to move.</p>
+
+<h3>Let the music follow the mood</h3>
+<p>Control intensity to bring layers in and out, or adjust the layers yourself. Your game decides when a moment should feel quiet, tense, or overwhelming; Verdandi handles the musical building blocks.</p>
+
+<h3>React without cutting the song off</h3>
+<p>Switch presets while the music is playing, with a transition that waits for a musical boundary and crossfades. Trigger short synthesized cues for events such as combat starting, victory, a boss reveal, or a scene transition—over the continuing track.</p>
+
+<h3>No prerecorded soundtrack required</h3>
+<p>Verdandi synthesizes its sounds at runtime. There are no bundled recorded tracks to loop or distribute, and the core renderer can also generate a WAV file offline so you can audition a seed, preset, or individual layer before integrating it into your game.</p>
+
+<h2>Made for game developers</h2>
+
+<p>Verdandi includes a Bevy 0.20 plugin with a controller resource for common gameplay interactions. Its music engine can also be used without Bevy: feed rendered stereo samples to your own audio callback, or use the offline WAV example to render music from the command line.</p>
+
+<p>You can start with the defaults, then customize the seed, pace, intensity, layers, key, scale, tempo, and chord progression. The <a href="{{ '/docs/' | relative_url }}">documentation</a> includes quick starts, API notes, working command examples, and guidance for extending the engine.</p>
+
+<h2>Current state</h2>
+
+<p>Verdandi is an actively developed Rust project. Its musical voices are synthesized approximations rather than recordings of real acoustic instruments, and sound quality is still being improved. The roadmap tracks future evaluation of sampled instruments; sampled asset playback is not implemented yet.</p>
+
+<p>Start with the <a href="{{ '/docs/' | relative_url }}">docs and how-tos</a>, try the <a href="https://github.com/right-ward/verdandi/blob/main/examples/demo.rs">interactive demo</a>, render a WAV, or browse the <a href="https://github.com/right-ward/verdandi">repository and roadmap</a>.</p>
