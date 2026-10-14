@@ -1,54 +1,35 @@
 ---
 layout: default
-title: Verdandi
+title: Orpheus
 permalink: /
-description: "Give your game an evolving soundtrack: seed-driven procedural music with distinct styles, adaptive layers, and repeatable musical patterns."
+description: "An Android-first preservation tool for backing up user-selected files and obtainable application state before a wipe."
 ---
 
-<h1>A soundtrack that grows with your game.</h1>
+<h1>Make a destructive change less destructive.</h1>
 
-<p><strong>Verdandi</strong> is a procedural music engine for games. Give it a seed and a musical style, and it creates a layered track that can evolve while it plays—so your soundtrack can respond to the feeling of a moment without relying on a folder full of prerecorded loops.</p>
+<p><strong>Orpheus</strong> is an Android-first preservation project for the data and application state you may want to keep before a bootloader unlock, factory reset, or another operation that wipes user data. It focuses on collecting what Android legitimately makes accessible, checking the resulting archive, and making gaps visible instead of promising a perfect device clone.</p>
 
-<p>Use it to score a lonely journey, a tense encounter, a dramatic reveal, or a quiet moment of reflection. The musical patterns are seed-driven, so the same setup recreates the same evolving arrangement.</p>
+<p>Orpheus does not bypass a mandatory wipe or perform the destructive operation. The current app builds and verifies preservation archives; restoration is still future work.</p>
 
-<p><a href="{{ '/docs/' | relative_url }}">Read the docs and integration guides</a> · <a href="https://github.com/right-ward/verdandi">Explore the source on GitHub</a></p>
+<p><a href="{{ '/docs/' | relative_url }}">Read the guide and current limitations</a> · <a href="https://github.com/right-ward/orpheus">Browse the source on GitHub</a> · <a href="https://github.com/right-ward/orpheus/blob/main/ROADMAP.md">View the roadmap</a></p>
 
-<h2>Four different musical identities</h2>
+<h2>What it can preserve today</h2>
 
-<h3>Ethereal</h3>
-<p>Slow, spacious exploration music with sustained harmony, airy bowed-string-like tones, and bell-like accents. For discovery, distance, and places that feel larger than the player.</p>
+<h3>User-selected files</h3>
+<p>Select folders through Android's document picker. Orpheus enumerates the selected trees and streams file contents into a compressed <strong>.orpheus</strong> archive, rather than loading whole files into memory. It records a logical manifest and per-file SHA-256 checksums, then reopens the finished archive and verifies its payloads. The app also estimates the selected content size and records interrupted or incomplete backup sessions.</p>
 
-<h3>Warbound</h3>
-<p>Driving riffs, distorted-guitar-like tones, bass, and metal-oriented drums. A more direct, forceful sound for danger and momentum.</p>
+<h3>Installed application inventory</h3>
+<p>Record the packages Android makes visible, including version and signing-certificate metadata, requested and granted runtime permissions where available, and information relevant to a later restore plan. APK preservation is a separate option: Orpheus can save obtainable base APKs and split APKs, verify them, and report items it could not read instead of silently omitting them.</p>
 
-<h3>Orchestral</h3>
-<p>Heavy metal expanded with orchestral-string and choir-like layers, aiming for a grand, almost sacred scale.</p>
+<h3>Optional Shizuku-assisted reads</h3>
+<p>When Shizuku or Sui is available and authorized, Orpheus performs a bounded, read-only diagnostics probe. After that probe succeeds, it can use a narrowly scoped fallback to read certain PackageManager-reported APK files under <strong>/data/app/</strong> when normal app access fails. It can also collect a small, opt-in allow-list of system settings; that snapshot is partial and is not currently restored.</p>
 
-<h3>Contemplative</h3>
-<p>Restrained, string-led music with a warm sustained bed, a darker melody, and a gentle repeating figure. Designed for reflection rather than constant escalation.</p>
+<h2>Designed around explicit limits</h2>
 
-<h2>More than a repeating loop</h2>
+<p>Android access depends on the device, OS version, package, and available privilege. Shizuku's shell/ADB access is not the same as root, and a successful probe does not mean all protected data is readable. Orpheus reports inaccessible or failed artifacts rather than treating every collection as complete.</p>
 
-<h3>Familiar, but never frozen</h3>
-<p>Each track is built from a musical frame chosen by its seed: key, mode, tempo, and chord progression. Across four-bar phrases, individual layers can repeat, mutate slightly, or develop a new pattern. The result keeps a recognizable identity while continuing to move.</p>
+<p>The project is currently in <strong>Phase 4 — Shizuku integration</strong>. Personal-data collectors, a guided pre-wipe readiness workflow, archive restoration, a root backend, and a CLI are not implemented yet. The current archive is a ZIP/DEFLATE container and is <strong>not encrypted</strong>; SHA-256 checksums help detect payload corruption but do not protect private contents. Treat archives as sensitive and keep a copy somewhere other than the device you may wipe.</p>
 
-<h3>Let the music follow the mood</h3>
-<p>Control intensity to bring layers in and out, or adjust the layers yourself. Your game decides when a moment should feel quiet, tense, or overwhelming; Verdandi handles the musical building blocks.</p>
+<h2>Start here</h2>
 
-<h3>React without cutting the song off</h3>
-<p>Switch presets while the music is playing, with a transition that waits for a musical boundary and crossfades. Trigger short synthesized cues for events such as combat starting, victory, a boss reveal, or a scene transition—over the continuing track.</p>
-
-<h3>No prerecorded soundtrack required</h3>
-<p>Verdandi synthesizes its sounds at runtime. There are no bundled recorded tracks to loop or distribute, and the core renderer can also generate a WAV file offline so you can audition a seed, preset, or individual layer before integrating it into your game.</p>
-
-<h2>Made for game developers</h2>
-
-<p>Verdandi includes a Bevy 0.20 plugin with a controller resource for common gameplay interactions. Its music engine can also be used without Bevy: feed rendered stereo samples to your own audio callback, or use the offline WAV example to render music from the command line.</p>
-
-<p>You can start with the defaults, then customize the seed, pace, intensity, layers, key, scale, tempo, and chord progression. The <a href="{{ '/docs/' | relative_url }}">documentation</a> includes quick starts, API notes, working command examples, and guidance for extending the engine.</p>
-
-<h2>Current state</h2>
-
-<p>Verdandi is an actively developed Rust project. Its musical voices are synthesized approximations rather than recordings of real acoustic instruments, and sound quality is still being improved. The roadmap tracks future evaluation of sampled instruments; sampled asset playback is not implemented yet.</p>
-
-<p>Start with the <a href="{{ '/docs/' | relative_url }}">docs and how-tos</a>, try the <a href="https://github.com/right-ward/verdandi/blob/main/examples/demo.rs">interactive demo</a>, render a WAV, or browse the <a href="https://github.com/right-ward/verdandi">repository and roadmap</a>.</p>
+<p>The <a href="{{ '/docs/' | relative_url }}">documentation</a> explains the current workflow, Shizuku setup, build instructions, archive handling, and known limitations. For implementation details, see the <a href="https://github.com/right-ward/orpheus/blob/main/README.md">README</a>, <a href="https://github.com/right-ward/orpheus/tree/main/docs">design contracts</a>, and <a href="https://github.com/right-ward/orpheus/blob/main/ROADMAP.md">roadmap</a>.</p>
