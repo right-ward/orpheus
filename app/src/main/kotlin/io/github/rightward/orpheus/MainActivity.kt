@@ -1490,7 +1490,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Sensitive contacts export")
             .setMessage(
-                "Contact names, phone numbers, email addresses, and other selected fields are " +
+                "Contact names, phone numbers, email addresses, and other exported fields are " +
                     "sensitive. This version writes archive contents without encryption, so " +
                     "the exported contact JSON will be readable by anyone who obtains the archive. " +
                     "Only continue if you can store it securely. Restore is not implemented."
