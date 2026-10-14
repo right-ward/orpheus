@@ -1,7 +1,8 @@
 package io.github.rightward.orpheus
 
 class CapabilityScanner(
-    private val shizukuStatus: ShizukuBackendStatus = ShizukuBackendStatus()
+    private val shizukuStatus: ShizukuBackendStatus = ShizukuBackendStatus(),
+    private val contactsPermissionGranted: Boolean = false
 ) {
     fun scan(): CapabilitySnapshot {
         val normal = CapabilityProvider.NORMAL_ANDROID
