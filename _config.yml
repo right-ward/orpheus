@@ -1,5 +1,5 @@
 title: "Orpheus"
-description: "Preserve Android environment through destructive system changes"
+description: "Android-first preservation of user files and obtainable application state before a wipe"
 url: "https://right-ward.github.io"
 baseurl: "/orpheus"
 lang: "en"
