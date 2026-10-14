@@ -324,8 +324,26 @@ class ArchiveWriter(
 
                 if (includeContacts) {
                     val archivePath = ArchivePaths.CONTACTS_SNAPSHOT
-                    try {
-                        val snapshot = ContactsCollector(resolver).collect()
+                    val snapshot = runCatching {
+                        ContactsCollector(resolver).collect()
+                    }.getOrNull()
+
+                    if (snapshot == null) {
+                        artifacts += ArchiveArtifact(
+                            id = "contacts-snapshot",
+                            kind = "contacts_snapshot",
+                            archivePath = archivePath,
+                            source = "android.contacts",
+                            status = ArtifactStatus.FAILED,
+                            sizeBytes = 0L,
+                            sha256 = null,
+                            modifiedAtEpochMs = null,
+                            errorCode = "CONTACTS_EXPORT_FAILED"
+                        )
+                        contactsExportOutcome = ContactsExportOutcome.FAILED
+                        contactsExportFailure =
+                            "Contacts could not be exported. Check READ_CONTACTS permission and Contacts Provider availability."
+                    } else {
                         val bytes = snapshot.json.toByteArray(Charsets.UTF_8)
                         writeEntry(zip, archivePath, snapshot.json)
                         artifacts += ArchiveArtifact(
@@ -341,21 +359,6 @@ class ArchiveWriter(
                         contactsExportOutcome = ContactsExportOutcome.SUCCEEDED
                         contactsExportSummary = "Exported " + snapshot.contactCount +
                             " contact(s) and " + snapshot.fieldCount + " field(s)."
-                    } catch (_: Exception) {
-                        artifacts += ArchiveArtifact(
-                            id = "contacts-snapshot",
-                            kind = "contacts_snapshot",
-                            archivePath = archivePath,
-                            source = "android.contacts",
-                            status = ArtifactStatus.FAILED,
-                            sizeBytes = 0L,
-                            sha256 = null,
-                            modifiedAtEpochMs = null,
-                            errorCode = "CONTACTS_EXPORT_FAILED"
-                        )
-                        contactsExportOutcome = ContactsExportOutcome.FAILED
-                        contactsExportFailure =
-                            "Contacts could not be exported. Check READ_CONTACTS permission and Contacts Provider availability."
                     }
                 }
 
