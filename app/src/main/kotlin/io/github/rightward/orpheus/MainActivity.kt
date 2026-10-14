@@ -408,8 +408,6 @@ class MainActivity : Activity() {
 
         addSpacer(12)
 
-        addSpacer(12)
-
         addCard {
             addSectionTitle("CONTACTS PRESERVATION")
             addBody(
@@ -1676,18 +1674,28 @@ class MainActivity : Activity() {
                             " System settings snapshot failed."
                         ShizukuSettingsSnapshotOutcome.NOT_RUN -> ""
                     }
+                    val contactsSummary = when (writeResult.contactsExportOutcome) {
+                        ContactsExportOutcome.SUCCEEDED ->
+                            " Contacts snapshot is partial: " +
+                                (writeResult.contactsExportSummary ?: "contacts exported.")
+                        ContactsExportOutcome.FAILED ->
+                            " Contacts export failed: " +
+                                (writeResult.contactsExportFailure ?: "unknown error")
+                        ContactsExportOutcome.NOT_RUN -> ""
+                    }
                     setStatus(
                         "Backup verified: " +
                             verification.artifactCount +
                             " artifacts, " +
                             formatBytes(verification.verifiedBytes) +
-                            " checked." + fallbackSummary + settingsSummary,
+                            " checked." + fallbackSummary + settingsSummary + contactsSummary,
                         if (
                             verification.failedArtifacts == 0 &&
                             writeResult.shizukuSettingsSnapshotOutcome !=
                                 ShizukuSettingsSnapshotOutcome.PARTIAL &&
                             writeResult.shizukuSettingsSnapshotOutcome !=
-                                ShizukuSettingsSnapshotOutcome.FAILED
+                                ShizukuSettingsSnapshotOutcome.FAILED &&
+                            writeResult.contactsExportOutcome == ContactsExportOutcome.NOT_RUN
                         ) {
                             successColor
                         } else {
@@ -1745,22 +1753,6 @@ class MainActivity : Activity() {
             settingsSnapshotSummary = result.shizukuSettingsSnapshotSummary,
             settingsSnapshotFailure = result.shizukuSettingsSnapshotFailure
         )
-    }
-
-    private fun updateContactsExportStatus(result: BackupWriteResult) {
-        if (result.contactsExportOutcome == ContactsExportOutcome.NOT_RUN) return
-
-        when (result.contactsExportOutcome) {
-            ContactsExportOutcome.NOT_RUN -> Unit
-            ContactsExportOutcome.SUCCEEDED -> setStatus(
-                result.contactsExportSummary ?: "Contacts export completed as a partial snapshot.",
-                warningColor
-            )
-            ContactsExportOutcome.FAILED -> setStatus(
-                result.contactsExportFailure ?: "Contacts export failed.",
-                warningColor
-            )
-        }
     }
 
     private fun verifyLastArchive(outputUri: String) {
