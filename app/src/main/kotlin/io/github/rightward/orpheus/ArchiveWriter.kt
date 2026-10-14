@@ -324,9 +324,11 @@ class ArchiveWriter(
 
                 if (includeContacts) {
                     val archivePath = ArchivePaths.CONTACTS_SNAPSHOT
-                    val snapshot = runCatching {
+                    val snapshot = try {
                         ContactsCollector(resolver).collect()
-                    }.getOrNull()
+                    } catch (_: Exception) {
+                        null
+                    }
 
                     if (snapshot == null) {
                         artifacts += ArchiveArtifact(
