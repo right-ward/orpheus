@@ -29,7 +29,7 @@ The current app:
 - runs a read-only `id`/`getprop` probe in an isolated Shizuku UserService and reports failures explicitly
 - can read PackageManager-reported APK files through a validated Shizuku file descriptor when normal app access fails
 - optionally records a strict allow-list of display, rotation, haptic-feedback, sound-effects, and animation settings via Shizuku; the snapshot is partial and is not restored
-- optionally exports contact names and selected contact fields through Android's Contacts Provider after runtime permission and a plaintext-archive warning; the snapshot is partial and is not restored
+- optionally exports contact names and selected contact fields through Android's Contacts Provider after runtime permission and a plaintext-archive warning; only allow-listed fields are exported, the snapshot is partial, and it is not restored
 - keeps deeper protected-data collectors and cross-device testing unfinished
 - performs no restore or destructive operation
 
