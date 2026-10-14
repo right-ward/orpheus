@@ -80,7 +80,7 @@ jobs:
 
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$ACTION" == "release" ]]; then
             if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-        gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --generate-notes >/dev/null 2>&1
+              gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --generate-notes >/dev/null 2>&1
             fi
 
             if ! git merge-base --is-ancestor "$tag_commit" HEAD; then
