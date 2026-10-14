@@ -15,7 +15,7 @@ The current app:
 - enumerates selected document trees
 - streams files into a .orpheus ZIP/DEFLATE container
 - records per-file SHA-256 checksums and a logical manifest
-- verifies the finished archive by reopening and hashing its file and package payloads
+- verifies the finished archive by reopening and hashing its file, package, and structured-data payloads
 - records interrupted/incomplete backup sessions
 - estimates selected content size before backup
 - inventories installed packages, version/signature metadata, runtime permission state, and package restore metadata
