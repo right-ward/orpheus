@@ -40,6 +40,20 @@ class CapabilityScanner(
                     detail = "Installed packages and exposed package metadata are inventoried through PackageManager."
                 ),
                 Capability(
+                    id = CapabilityId.CONTACTS_EXPORT,
+                    provider = normal,
+                    availability = if (contactsPermissionGranted) {
+                        CapabilityAvailability.AVAILABLE
+                    } else {
+                        CapabilityAvailability.LIMITED
+                    },
+                    detail = if (contactsPermissionGranted) {
+                        "Contacts Provider access is authorized; export remains opt-in."
+                    } else {
+                        "Grant the Android READ_CONTACTS permission to enable the optional contacts export."
+                    }
+                ),
+                Capability(
                     id = CapabilityId.PACKAGE_APK_PRESERVATION,
                     provider = normal,
                     availability = CapabilityAvailability.LIMITED,
