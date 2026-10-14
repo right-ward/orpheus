@@ -1,7 +1,8 @@
 package io.github.rightward.orpheus
 
 class CapabilityScanner(
-    private val shizukuStatus: ShizukuBackendStatus = ShizukuBackendStatus()
+    private val shizukuStatus: ShizukuBackendStatus = ShizukuBackendStatus(),
+    private val contactsPermissionGranted: Boolean = false
 ) {
     fun scan(): CapabilitySnapshot {
         val normal = CapabilityProvider.NORMAL_ANDROID
@@ -38,6 +39,20 @@ class CapabilityScanner(
                     provider = normal,
                     availability = CapabilityAvailability.AVAILABLE,
                     detail = "Installed packages and exposed package metadata are inventoried through PackageManager."
+                ),
+                Capability(
+                    id = CapabilityId.CONTACTS_EXPORT,
+                    provider = normal,
+                    availability = if (contactsPermissionGranted) {
+                        CapabilityAvailability.AVAILABLE
+                    } else {
+                        CapabilityAvailability.LIMITED
+                    },
+                    detail = if (contactsPermissionGranted) {
+                        "Contacts Provider access is authorized; export remains opt-in."
+                    } else {
+                        "Grant the Android READ_CONTACTS permission to enable the optional contacts export."
+                    }
                 ),
                 Capability(
                     id = CapabilityId.PACKAGE_APK_PRESERVATION,

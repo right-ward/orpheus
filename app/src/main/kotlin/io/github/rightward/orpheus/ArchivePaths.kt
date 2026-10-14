@@ -10,5 +10,6 @@ object ArchivePaths {
     const val PACKAGES_PREFIX = "packages/"
     const val DATA_PREFIX = "data/"
     const val SYSTEM_SETTINGS = "data/system/settings.json"
+    const val CONTACTS_SNAPSHOT = "data/personal/contacts.json"
     const val EXPORTS_PREFIX = "exports/"
 }

@@ -6,7 +6,7 @@ Orpheus is an Android-first preservation and migration tool. It does not try to 
 
 ## Current status
 
-Phase 4 — Shizuku integration (initial APK read fallback).
+Phase 5 — personal data (first opt-in contacts export).
 
 The current app:
 
@@ -15,7 +15,7 @@ The current app:
 - enumerates selected document trees
 - streams files into a .orpheus ZIP/DEFLATE container
 - records per-file SHA-256 checksums and a logical manifest
-- verifies the finished archive by reopening and hashing its file and package payloads
+- verifies the finished archive by reopening and hashing its file, package, and structured-data payloads
 - records interrupted/incomplete backup sessions
 - estimates selected content size before backup
 - inventories installed packages, version/signature metadata, runtime permission state, and package restore metadata
@@ -29,6 +29,7 @@ The current app:
 - runs a read-only `id`/`getprop` probe in an isolated Shizuku UserService and reports failures explicitly
 - can read PackageManager-reported APK files through a validated Shizuku file descriptor when normal app access fails
 - optionally records a strict allow-list of display, rotation, haptic-feedback, sound-effects, and animation settings via Shizuku; the snapshot is partial and is not restored
+- optionally exports contact names and selected contact fields through Android's Contacts Provider after runtime permission and a plaintext-archive warning; only allow-listed fields are exported, the snapshot is partial, and it is not restored
 - keeps deeper protected-data collectors and cross-device testing unfinished
 - performs no restore or destructive operation
 
@@ -58,6 +59,7 @@ See:
 - docs/ARCHITECTURE.md
 - docs/backup-format.md
 - docs/specification-contracts.md
+- docs/contacts-export.md
 - ROADMAP.md
 
 ## Shizuku support

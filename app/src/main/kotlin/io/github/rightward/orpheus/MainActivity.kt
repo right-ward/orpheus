@@ -1,5 +1,6 @@
 package io.github.rightward.orpheus
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ComponentName
@@ -46,6 +47,8 @@ class MainActivity : Activity() {
     private var includePackagePreservation = true
     private var includePackageContent = true
     private var includeSystemSettings = false
+    private var includeContacts = false
+    private var contactsPermissionRequestPending = false
     private var preserveOnlySelectedPackages = false
     private var selectedPackageNames = linkedSetOf<String>()
     private var packageSelectionInitialized = false
@@ -198,6 +201,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (!hasContactsPermission()) includeContacts = false
         refreshShizukuState()
         render()
     }
@@ -228,13 +232,36 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_READ_CONTACTS) return
+
+        contactsPermissionRequestPending = false
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED &&
+            hasContactsPermission()
+        includeContacts = granted
+        render()
+        setStatus(
+            if (granted) {
+                "Contacts permission granted. The optional contacts export is enabled."
+            } else {
+                "Contacts permission was not granted. Contacts will not be included."
+            },
+            if (granted) successColor else warningColor
+        )
+    }
+
     private fun render() {
         root.removeAllViews()
 
         root.addView(
             makeHeader(
                 title = "Orpheus",
-                subtitle = "Android preservation · Phase 4"
+                subtitle = "Android preservation · Phase 5"
             )
         )
 
@@ -381,6 +408,52 @@ class MainActivity : Activity() {
 
         addSpacer(12)
 
+        addCard {
+            addSectionTitle("CONTACTS PRESERVATION")
+            addBody(
+                "Optional export of names, phone numbers, email addresses, postal addresses, " +
+                    "organizations, nicknames, dates, websites, and relations from Android's " +
+                    "Contacts Provider. Contact photos, notes, account metadata, and unsupported " +
+                    "fields are excluded. Restore is not implemented."
+            )
+
+            addSpacer(6)
+
+            addView(
+                Switch(this@MainActivity).apply {
+                    text = "Preserve contacts"
+                    isChecked = includeContacts
+                    setTextColor(primaryTextColor)
+                    setOnCheckedChangeListener { _, checked ->
+                        if (!checked) {
+                            includeContacts = false
+                            render()
+                        } else {
+                            includeContacts = false
+                            render()
+                            showContactsExportWarning()
+                        }
+                    }
+                }
+            )
+
+            addBody(
+                when {
+                    includeContacts && hasContactsPermission() ->
+                        "Contacts export enabled. A partial snapshot will be added to the archive."
+                    contactsPermissionRequestPending ->
+                        "Waiting for Android contacts permission."
+                    hasContactsPermission() ->
+                        "Permission is available. Enable the switch to include contacts."
+                    else ->
+                        "Enabling export asks for Android READ_CONTACTS permission."
+                },
+                primary = false
+            )
+        }
+
+        addSpacer(12)
+
         val canCollectSystemSettings =
             shizukuBackendStatus.diagnosticsAvailability() ==
                 CapabilityAvailability.AVAILABLE &&
@@ -444,7 +517,8 @@ class MainActivity : Activity() {
             }.apply {
                 isEnabled = selectedTrees.isNotEmpty() ||
                     includePackagePreservation ||
-                    includeSystemSettings
+                    includeSystemSettings ||
+                    includeContacts
                 alpha = if (isEnabled) 1.0f else 0.45f
             }
             addView(backupButton)
@@ -553,7 +627,10 @@ class MainActivity : Activity() {
 
         addCard {
             addSectionTitle("CAPABILITIES")
-            CapabilityScanner(shizukuBackendStatus).scan().capabilities.forEach { capability ->
+            CapabilityScanner(
+                shizukuStatus = shizukuBackendStatus,
+                contactsPermissionGranted = hasContactsPermission()
+            ).scan().capabilities.forEach { capability ->
                 val line = addBody(
                     capability.id.displayName +
                         " · " +
@@ -1064,9 +1141,14 @@ class MainActivity : Activity() {
         } else {
             "System settings: disabled"
         }
+        val contactsSummary = if (includeContacts) {
+            "Contacts: partial export enabled"
+        } else {
+            "Contacts: disabled"
+        }
 
         return fileSummary + " · " + packageSummary + " · " +
-            apkSummary + " · " + settingsSummary
+            apkSummary + " · " + settingsSummary + " · " + contactsSummary
     }
 
     private fun openPackageSelectionDialog() {
@@ -1385,13 +1467,57 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun hasContactsPermission(): Boolean =
+        checkSelfPermission(Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun requestContactsPermission() {
+        if (contactsPermissionRequestPending || hasContactsPermission()) {
+            includeContacts = hasContactsPermission()
+            render()
+            return
+        }
+
+        contactsPermissionRequestPending = true
+        setStatus("Requesting contacts permission from Android…", warningColor)
+        requestPermissions(
+            arrayOf(Manifest.permission.READ_CONTACTS),
+            REQUEST_READ_CONTACTS
+        )
+    }
+
+    private fun showContactsExportWarning() {
+        AlertDialog.Builder(this)
+            .setTitle("Sensitive contacts export")
+            .setMessage(
+                "Contact names, phone numbers, email addresses, and other exported fields are " +
+                    "sensitive. This version writes archive contents without encryption, so " +
+                    "the exported contact JSON will be readable by anyone who obtains the archive. " +
+                    "Only continue if you can store it securely. Restore is not implemented."
+            )
+            .setNegativeButton("Cancel") { _, _ ->
+                includeContacts = false
+                render()
+            }
+            .setPositiveButton("Continue") { _, _ ->
+                if (hasContactsPermission()) {
+                    includeContacts = true
+                    render()
+                } else {
+                    requestContactsPermission()
+                }
+            }
+            .show()
+    }
+
     private fun openArchiveCreator() {
         if (selectedTrees.isEmpty() &&
             !includePackagePreservation &&
-            !includeSystemSettings
+            !includeSystemSettings &&
+            !includeContacts
         ) {
             setStatus(
-                "Select a folder or enable package/settings preservation.",
+                "Select a folder or enable package, settings, or contacts preservation.",
                 warningColor
             )
             return
@@ -1412,12 +1538,16 @@ class MainActivity : Activity() {
         val preservePackages = includePackagePreservation
         val preservePackageApks = includePackageContent
         val preserveSystemSettings = includeSystemSettings
+        val preserveContacts = includeContacts
         val packageNames = if (preserveOnlySelectedPackages) {
             selectedPackageNames.toSet()
         } else {
             null
         }
-        val capabilitySnapshot = CapabilityScanner(shizukuBackendStatus).scan()
+        val capabilitySnapshot = CapabilityScanner(
+            shizukuStatus = shizukuBackendStatus,
+            contactsPermissionGranted = hasContactsPermission()
+        ).scan()
         val expectedShizukuUid = shizukuBackendStatus.serverUid
         val shizukuSettingsProvider: (() -> String)? = if (
             preserveSystemSettings &&
@@ -1493,7 +1623,8 @@ class MainActivity : Activity() {
                     shizukuApkReader = shizukuApkReader,
                     includeSystemSettings = preserveSystemSettings,
                     shizukuSettingsProvider = shizukuSettingsProvider,
-                    expectedShizukuUid = expectedShizukuUid
+                    expectedShizukuUid = expectedShizukuUid,
+                    includeContacts = preserveContacts
                 )
 
                 val verification = ArchiveVerifier(contentResolver)
@@ -1543,18 +1674,28 @@ class MainActivity : Activity() {
                             " System settings snapshot failed."
                         ShizukuSettingsSnapshotOutcome.NOT_RUN -> ""
                     }
+                    val contactsSummary = when (writeResult.contactsExportOutcome) {
+                        ContactsExportOutcome.SUCCEEDED ->
+                            " Contacts snapshot is partial: " +
+                                (writeResult.contactsExportSummary ?: "contacts exported.")
+                        ContactsExportOutcome.FAILED ->
+                            " Contacts export failed: " +
+                                (writeResult.contactsExportFailure ?: "unknown error")
+                        ContactsExportOutcome.NOT_RUN -> ""
+                    }
                     setStatus(
                         "Backup verified: " +
                             verification.artifactCount +
                             " artifacts, " +
                             formatBytes(verification.verifiedBytes) +
-                            " checked." + fallbackSummary + settingsSummary,
+                            " checked." + fallbackSummary + settingsSummary + contactsSummary,
                         if (
                             verification.failedArtifacts == 0 &&
                             writeResult.shizukuSettingsSnapshotOutcome !=
                                 ShizukuSettingsSnapshotOutcome.PARTIAL &&
                             writeResult.shizukuSettingsSnapshotOutcome !=
-                                ShizukuSettingsSnapshotOutcome.FAILED
+                                ShizukuSettingsSnapshotOutcome.FAILED &&
+                            writeResult.contactsExportOutcome == ContactsExportOutcome.NOT_RUN
                         ) {
                             successColor
                         } else {
@@ -1747,6 +1888,7 @@ class MainActivity : Activity() {
         private const val REQUEST_TREE = 1001
         private const val REQUEST_CREATE_ARCHIVE = 1002
         private const val REQUEST_SHIZUKU_PERMISSION = 1003
+        private const val REQUEST_READ_CONTACTS = 1004
         private const val SHIZUKU_SETUP_URL = "https://shizuku.rikka.app/"
     }
 }

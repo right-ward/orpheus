@@ -30,7 +30,10 @@ data class BackupWriteResult(
     val shizukuSettingsSnapshotOutcome: ShizukuSettingsSnapshotOutcome =
         ShizukuSettingsSnapshotOutcome.NOT_RUN,
     val shizukuSettingsSnapshotSummary: String? = null,
-    val shizukuSettingsSnapshotFailure: String? = null
+    val shizukuSettingsSnapshotFailure: String? = null,
+    val contactsExportOutcome: ContactsExportOutcome = ContactsExportOutcome.NOT_RUN,
+    val contactsExportSummary: String? = null,
+    val contactsExportFailure: String? = null
 )
 
 class ArchiveWriter(
@@ -49,9 +52,15 @@ class ArchiveWriter(
         shizukuApkReader: PackageApkSourceReader? = null,
         includeSystemSettings: Boolean = false,
         shizukuSettingsProvider: (() -> String)? = null,
-        expectedShizukuUid: Int? = null
+        expectedShizukuUid: Int? = null,
+        includeContacts: Boolean = false
     ): BackupWriteResult {
-        require(selectedTrees.isNotEmpty() || includePackages || includeSystemSettings) {
+        require(
+            selectedTrees.isNotEmpty() ||
+                includePackages ||
+                includeSystemSettings ||
+                includeContacts
+        ) {
             "At least one preservation source must be selected"
         }
 
@@ -67,6 +76,9 @@ class ArchiveWriter(
             ShizukuSettingsSnapshotOutcome.NOT_RUN
         var shizukuSettingsSnapshotSummary: String? = null
         var shizukuSettingsSnapshotFailure: String? = null
+        var contactsExportOutcome = ContactsExportOutcome.NOT_RUN
+        var contactsExportSummary: String? = null
+        var contactsExportFailure: String? = null
 
         val rawOutput = resolver.openOutputStream(outputUri)
             ?: throw IOException("Unable to open archive output")
@@ -310,6 +322,48 @@ class ArchiveWriter(
                     }
                 }
 
+                if (includeContacts) {
+                    val archivePath = ArchivePaths.CONTACTS_SNAPSHOT
+                    val snapshot = try {
+                        ContactsCollector(resolver).collect()
+                    } catch (_: Exception) {
+                        null
+                    }
+
+                    if (snapshot == null) {
+                        artifacts += ArchiveArtifact(
+                            id = "contacts-snapshot",
+                            kind = "contacts_snapshot",
+                            archivePath = archivePath,
+                            source = "android.contacts",
+                            status = ArtifactStatus.FAILED,
+                            sizeBytes = 0L,
+                            sha256 = null,
+                            modifiedAtEpochMs = null,
+                            errorCode = "CONTACTS_EXPORT_FAILED"
+                        )
+                        contactsExportOutcome = ContactsExportOutcome.FAILED
+                        contactsExportFailure =
+                            "Contacts could not be exported. Check READ_CONTACTS permission and Contacts Provider availability."
+                    } else {
+                        val bytes = snapshot.json.toByteArray(Charsets.UTF_8)
+                        writeEntry(zip, archivePath, snapshot.json)
+                        artifacts += ArchiveArtifact(
+                            id = "contacts-snapshot",
+                            kind = "contacts_snapshot",
+                            archivePath = archivePath,
+                            source = "android.contacts",
+                            status = ArtifactStatus.PARTIAL,
+                            sizeBytes = bytes.size.toLong(),
+                            sha256 = Sha256.digest(bytes),
+                            modifiedAtEpochMs = null
+                        )
+                        contactsExportOutcome = ContactsExportOutcome.SUCCEEDED
+                        contactsExportSummary = "Exported " + snapshot.contactCount +
+                            " contact(s) and " + snapshot.fieldCount + " field(s)."
+                    }
+                }
+
                 val manifest = ArchiveManifest(
                     archiveId = archiveId,
                     createdAt = nowUtc(),
@@ -358,7 +412,10 @@ class ArchiveWriter(
             shizukuApkFallbackSuccesses = shizukuApkFallbackSuccesses,
             shizukuSettingsSnapshotOutcome = shizukuSettingsSnapshotOutcome,
             shizukuSettingsSnapshotSummary = shizukuSettingsSnapshotSummary,
-            shizukuSettingsSnapshotFailure = shizukuSettingsSnapshotFailure
+            shizukuSettingsSnapshotFailure = shizukuSettingsSnapshotFailure,
+            contactsExportOutcome = contactsExportOutcome,
+            contactsExportSummary = contactsExportSummary,
+            contactsExportFailure = contactsExportFailure
         )
     }
 

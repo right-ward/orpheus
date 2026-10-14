@@ -6,6 +6,22 @@ import org.junit.Test
 
 class CapabilityScannerTest {
     @Test
+    fun contactsExportRequiresRuntimePermission() {
+        assertEquals(
+            CapabilityAvailability.LIMITED,
+            CapabilityScanner()
+                .scan()
+                .forId(CapabilityId.CONTACTS_EXPORT)?.availability
+        )
+        assertEquals(
+            CapabilityAvailability.AVAILABLE,
+            CapabilityScanner(contactsPermissionGranted = true)
+                .scan()
+                .forId(CapabilityId.CONTACTS_EXPORT)?.availability
+        )
+    }
+
+    @Test
     fun missingShizukuIsNotReportedAsAnAndroidLimitation() {
         val snapshot = CapabilityScanner().scan()
         assertEquals(
