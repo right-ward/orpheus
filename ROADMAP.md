@@ -101,7 +101,7 @@ Goal: preserve the user's own structured data through supported Android interfac
 
 Initial targets:
 
-- [ ] Contacts
+- [x] Contacts — opt-in, allow-listed export and normalized snapshot schema implemented; restoration and post-restore verification remain open
 - [ ] SMS
 - [ ] Call history
 - [ ] Calendars
