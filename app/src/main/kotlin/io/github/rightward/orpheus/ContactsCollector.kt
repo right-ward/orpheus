@@ -49,7 +49,8 @@ class ContactsCollector(
                 val id = rows.getLong(idIndex)
                 val mime = rows.getString(mimeIndex) ?: continue
                 val data1 = rows.getString(data1Index)
-                val data2 = rows.getString(data2Index)?.toIntOrNull()
+                val data2Raw = rows.getString(data2Index)
+                val data2 = data2Raw?.toIntOrNull()
                 val data3 = rows.getString(data3Index)?.takeIf { it.isNotBlank() }
                 val data4 = rows.getString(data4Index)?.takeIf { it.isNotBlank() }
                 val data5 = rows.getString(data5Index)?.takeIf { it.isNotBlank() }
@@ -60,7 +61,7 @@ class ContactsCollector(
                     ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE -> {
                         if (contact.displayName.isNullOrBlank()) {
                             contact.displayName = data1?.takeIf { it.isNotBlank() }
-                                ?: listOfNotNull(data4, data2?.let { null }, data5, data6)
+                                ?: listOfNotNull(data4, data2Raw, data5, data3, data6)
                                     .filter { it.isNotBlank() }
                                     .joinToString(" ")
                                     .takeIf { it.isNotBlank() }
